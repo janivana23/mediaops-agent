@@ -39,10 +39,17 @@ export function JobTable({ jobs }: { jobs: JobOut[] }) {
         </thead>
         <tbody>
           {jobs.map(job => (
-            <tr key={job.id} title={job.status_reason ?? undefined}>
+            <tr key={job.id}>
               <td>{job.campaign}</td>
               <td>{job.prompt}</td>
-              <td><StatusBadge status={job.status} /></td>
+              <td>
+                <StatusBadge status={job.status} />
+                {job.status_reason && (
+                  <div className="status-reason" title={job.status_reason}>
+                    {job.status_reason}
+                  </div>
+                )}
+              </td>
               <td>{job.provider_used ?? '—'}</td>
               <td>{job.resolution_used ?? job.requested_resolution}</td>
               <td className="num">{job.actual_cost_cents != null ? `${job.actual_cost_cents}c` : '—'}</td>

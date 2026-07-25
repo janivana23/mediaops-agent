@@ -162,6 +162,16 @@ td.num {
   text-align: right;
 }
 
+.status-reason {
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .badge {
   display: inline-flex;
   align-items: center;
