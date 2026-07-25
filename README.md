@@ -157,20 +157,40 @@ docker-compose.yml    # Postgres + backend, for a production-like local run
 
 ## Run it
 
+Commands below assume you're starting from the repo root (`mediaops-agent/`)
+each time — `cd backend` or `cd frontend` first, don't chain `cd`s across
+blocks. Comments are on their own line, not trailing on a command: on zsh
+(macOS's default shell) `#` only starts a comment at the start of a line
+in interactive mode, so a trailing `# comment` gets fed to the command as
+literal arguments.
+
 ### Backend
 
 ```bash
 cd backend
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # optional — works with no OPENROUTER_API_KEY, mock provider serves everything
+```
 
-python -m app.seed              # creates two demo clients + five jobs covering every status
-uvicorn app.main:app --reload   # http://127.0.0.1:8000
+`.env` is optional — the app runs end-to-end with no `OPENROUTER_API_KEY`,
+the mock provider serves everything. If you do want the real provider:
+
+```bash
+cp .env.example .env
+# then edit .env and set OPENROUTER_API_KEY — never put a real key in
+# .env.example, that file is committed to git
 ```
 
 ```bash
-cd backend && source venv/bin/activate && pytest tests/ -v
+python -m app.seed
+uvicorn app.main:app --reload
+```
+
+`app.seed` creates two demo clients and five jobs covering every status.
+The API is then at http://127.0.0.1:8000.
+
+```bash
+pytest tests/ -v
 ```
 
 ### Frontend
@@ -178,8 +198,10 @@ cd backend && source venv/bin/activate && pytest tests/ -v
 ```bash
 cd frontend
 npm install
-npm run dev   # http://localhost:5173, proxies /api and /outputs to :8000
+npm run dev
 ```
+
+Opens at http://localhost:5173, proxying `/api` and `/outputs` to `:8000`.
 
 ### Docker (Postgres instead of SQLite)
 
