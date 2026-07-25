@@ -28,7 +28,7 @@ OPENROUTER_BASE_URL = os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.
 # Verify the current slug on https://openrouter.ai/models — image-gen model
 # ids on OpenRouter change as providers cycle previews in/out.
 OPENROUTER_IMAGE_MODEL = os.environ.get(
-    "OPENROUTER_IMAGE_MODEL", "google/gemini-2.5-flash-image-preview"
+    "OPENROUTER_IMAGE_MODEL", "google/gemini-2.5-flash-image"
 )
 PROVIDER_TIMEOUT_SECONDS = float(os.environ.get("PROVIDER_TIMEOUT_SECONDS", "20"))
 
