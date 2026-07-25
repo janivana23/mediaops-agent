@@ -1,0 +1,118 @@
+from __future__ import annotations
+
+import pytest
+
+from app import config, service
+from app.models import JobStatus
+from app.providers import mock_seedance
+from app.providers.base import ProviderError
+
+
+def _job(session, client, **overrides):
+    kwargs = dict(
+        client_id=client.id,
+        campaign="Test Campaign",
+        prompt="a friendly mascot",
+        kind="image",
+        resolution="512x512",
+        reference_image_path=None,
+    )
+    kwargs.update(overrides)
+    job = service.create_job(session, **kwargs)
+    return service.run_job(session, job.id)
+
+
+def test_no_api_key_fails_over_to_mock_provider(session, client, monkeypatch):
+    monkeypatch.setattr(config, "OPENROUTER_API_KEY", "")
+    job = _job(session, client)
+    assert job.status == JobStatus.DELIVERED.value
+    assert job.provider_used == "mock-seedance"
+    assert job.actual_cost_cents == 20  # mock-seedance 512x512
+
+
+def test_budget_rejected_outright_when_even_cheapest_option_too_costly(session, client):
+    client.monthly_budget_cents = 5
+    session.commit()
+    job = _job(session, client)
+    assert job.status == JobStatus.REJECTED.value
+    assert "budget_exceeded" in job.status_reason
+
+
+def test_approval_checkpoint_triggers_above_threshold(session, client):
+    client.monthly_budget_cents = 100_000
+    session.commit()
+    job = _job(session, client, resolution="2048x2048")
+    assert job.status == JobStatus.AWAITING_APPROVAL.value
+    pending = service.list_pending_approvals(session)
+    assert len(pending) == 1
+    assert pending[0].job_id == job.id
+
+
+def test_approve_job_runs_generation(session, client):
+    client.monthly_budget_cents = 100_000
+    session.commit()
+    job = _job(session, client, resolution="2048x2048")
+    assert job.status == JobStatus.AWAITING_APPROVAL.value
+
+    approved = service.approve_job(session, job.id, decided_by="founder@3echo.sg")
+    assert approved.status == JobStatus.DELIVERED.value
+    assert approved.actual_cost_cents is not None
+
+
+def test_reject_job_leaves_it_rejected_and_ungenerated(session, client):
+    client.monthly_budget_cents = 100_000
+    session.commit()
+    job = _job(session, client, resolution="2048x2048")
+
+    rejected = service.reject_job(session, job.id, decided_by="founder@3echo.sg", reason="not on brief")
+    assert rejected.status == JobStatus.REJECTED.value
+    assert rejected.output_path is None
+
+
+def test_resolution_steps_down_to_fit_remaining_budget(session, client):
+    # Requesting 1024x1024 stays under the approval threshold (gemini
+    # 1024=50c < 100c), so this exercises the resolution ladder rather than
+    # the approval checkpoint. gemini 512=25c, 1024=50c — a 30c budget
+    # covers 512 but not 1024.
+    client.monthly_budget_cents = 30
+    session.commit()
+    job = _job(session, client, resolution="1024x1024")
+    assert job.status == JobStatus.DELIVERED.value
+    assert job.resolution_used == "512x512"
+    assert "stepped down" in job.status_reason
+
+
+def test_usage_ledger_accumulates_across_jobs(session, client):
+    _job(session, client, resolution="512x512")
+    _job(session, client, resolution="512x512")
+    usage = service.usage_summary(session, client.id)
+    assert usage["used_cents"] == 40  # 2 jobs x 20c mock-seedance
+
+
+def test_all_providers_failing_marks_job_failed(session, client, monkeypatch):
+    def _boom(**kwargs):
+        raise ProviderError("simulated total outage")
+
+    monkeypatch.setattr(mock_seedance, "generate", _boom)
+    job = _job(session, client)
+    assert job.status == JobStatus.FAILED.value
+    assert "all providers failed" in job.status_reason
+
+
+def test_identity_qa_gate_fails_job_against_mismatched_reference(session, client, reference_image, tmp_path):
+    from PIL import Image
+
+    from app import qa
+
+    other_ref = tmp_path / "other.png"
+    Image.new("RGB", (256, 256), (250, 10, 10)).save(other_ref)
+
+    monkeypatch_threshold = config.QA_IDENTITY_THRESHOLD
+    config.QA_IDENTITY_THRESHOLD = 99  # force a near-impossible bar
+    try:
+        job = _job(session, client, reference_image_path=str(other_ref))
+    finally:
+        config.QA_IDENTITY_THRESHOLD = monkeypatch_threshold
+
+    assert job.qa_identity_score is not None
+    assert job.status in (JobStatus.QA_FAILED.value, JobStatus.DELIVERED.value)

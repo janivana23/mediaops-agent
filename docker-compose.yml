@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: mediaops
+      POSTGRES_PASSWORD: mediaops
+      POSTGRES_DB: mediaops
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mediaops"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg2://mediaops:mediaops@postgres:5432/mediaops
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      AUTO_APPROVE_THRESHOLD_CENTS: ${AUTO_APPROVE_THRESHOLD_CENTS:-100}
+      CORS_ORIGINS: http://localhost:5173
+    volumes:
+      - outputs:/app/outputs
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  outputs:
