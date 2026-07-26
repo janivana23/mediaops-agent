@@ -87,7 +87,7 @@ def generate(
         # No real video model behind this demo — we render a 3-keyframe
         # contact sheet standing in for a multi-shot storyboard draft.
         frames = [
-            _keyframe((w, h), seed + i * 97, f"{prompt} — shot {i + 1}/3", reference_image_path)
+            _keyframe((w, h), seed + i * 97, f"{prompt} - shot {i + 1}/3", reference_image_path)
             for i in range(3)
         ]
         sheet = Image.new("RGB", (w * 3, h))

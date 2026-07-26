@@ -68,7 +68,10 @@ def generate_asset(
         prompt: what to generate.
         resolution: "512x512" | "1024x1024" | "2048x2048" (image), ignored for kind="video".
         kind: "image" or "video" (video renders a 3-shot keyframe storyboard, not real video).
-        reference_image_path: absolute path to a reference image for character/identity consistency.
+        reference_image_path: path to a reference image for character/identity
+            consistency, must resolve to somewhere inside the backend/
+            project directory (this API has no auth, so arbitrary
+            filesystem paths are rejected).
     """
     with session_scope() as session:
         try:

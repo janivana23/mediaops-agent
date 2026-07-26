@@ -108,6 +108,22 @@ a `SELECT ... FOR UPDATE` on the client row at the top of the check; SQLite
 (this project's zero-config default) doesn't support row locking the same
 way, so that's called out rather than silently glossed over.
 
+A third bug, found after the fact rather than by design: video jobs were
+completely broken end-to-end. `_affordable_resolution` special-cases video
+(it's priced flat, not by resolution — see `costs.py`) but returned the
+literal string `"video"` instead of the actual requested frame size, and
+that string gets passed straight to the provider as the WxH to render at.
+Every video job failed on both providers (`gemini-openrouter: does not
+support kind=video | mock-seedance: invalid resolution 'video'`) until it
+was caught by actually running one end-to-end and reading the error,
+not by re-reading the code. `test_video_job_generates_at_requested_frame_resolution`
+now pins this down. Related hardening from the same pass: `create_job`
+now validates `kind`/`resolution` against known values and confines
+`reference_image_path` to inside the project directory — this API has no
+auth, so an unvalidated server-side file path is an arbitrary local file
+read, and an unvalidated resolution string is an unhandled `KeyError`
+(a raw 500) instead of a clean 400.
+
 ## What's real vs. mocked
 
 - **`gemini-openrouter`** (`app/providers/gemini_openrouter.py`) is a real
@@ -209,7 +225,28 @@ Opens at http://localhost:5173, proxying `/api` and `/outputs` to `:8000`.
 docker compose up --build
 ```
 
+This runs Postgres + the backend only (`:8000`) — run the frontend with
+`npm run dev` against it as above. `frontend/Dockerfile` exists for static
+hosting (e.g. Cloud Run) but isn't wired into `docker-compose.yml`: the
+built static bundle calls `/api` same-origin, which needs a reverse proxy
+in front of both containers to route to the backend — a small
+nginx/Caddy config, deliberately left out here as out of scope for a
+local dev compose file.
+
 ### As an MCP server
+
+This repo already has a project-scoped `.mcp.json` (added via
+`claude mcp add mediaops --scope project -- backend/venv/bin/python
+backend/mcp_server.py`). Open Claude Code at the repo root and approve it
+once (`claude` will prompt), and `generate_asset`, `get_usage`,
+`list_pending_approvals`, `approve_job`, `reject_job`, and `list_jobs` are
+available as tools. The `.claude/skills/generate-campaign/` skill drives
+those tools through a full campaign batch — see that file for the
+procedure (check budget first, generate serially so each check is
+meaningful, stop and hand off to a human on `awaiting_approval` rather
+than trying to route around it).
+
+To run the server standalone, or against another MCP client:
 
 ```bash
 cd backend && source venv/bin/activate
@@ -217,22 +254,16 @@ python mcp_server.py
 # or inspect it: npx @modelcontextprotocol/inspector python mcp_server.py
 ```
 
-Point Claude Code or Claude Desktop at it as a local stdio MCP server
-(project-scoped `.mcp.json` or `claude mcp add`), and it exposes
-`generate_asset`, `get_usage`, `list_pending_approvals`, `approve_job`,
-`reject_job`, and `list_jobs`. The `.claude/skills/generate-campaign/`
-skill in this repo drives those tools through a full campaign batch —
-see that file for the procedure (check budget first, generate serially so
-each check is meaningful, stop and hand off to a human on
-`awaiting_approval` rather than trying to route around it).
-
 ## Tests
 
-15 tests, all exercising `service.run_job` against a real in-memory SQLite
-DB (no mocked ORM) plus the QA scoring functions directly:
-budget-rejection, the approval checkpoint, approve/reject transitions,
-resolution stepdown, usage-ledger accumulation, provider failover (and
-total-failure), and the identity/brand QA gate.
+20 tests, all exercising `service.run_job`/`create_job` against a real
+in-memory SQLite DB (no mocked ORM) plus the QA scoring functions
+directly: budget-rejection, the approval checkpoint, approve/reject
+transitions, resolution stepdown, usage-ledger accumulation, provider
+failover (and total-failure), the identity/brand QA gate, video-job
+generation (regression test for a real bug — see below), and input
+validation (unknown kind/resolution, reference paths outside the allowed
+directory or that don't exist).
 
 ```bash
 cd backend && source venv/bin/activate && pytest tests/ -v

@@ -99,6 +99,51 @@ def test_all_providers_failing_marks_job_failed(session, client, monkeypatch):
     assert "all providers failed" in job.status_reason
 
 
+def test_video_job_generates_at_requested_frame_resolution(session, client):
+    # Video is priced flat (see costs.py) but the frame resolution passed to
+    # the provider still has to be a real WxH, not the "video" cost-table
+    # key — regression test for a bug where _affordable_resolution returned
+    # the literal string "video", which broke every video job.
+    client.monthly_budget_cents = 100_000
+    session.commit()
+    job = _job(session, client, kind="video", resolution="512x512")
+    assert job.status == JobStatus.AWAITING_APPROVAL.value  # video always exceeds the threshold
+
+    approved = service.approve_job(session, job.id, decided_by="founder@3echo.sg")
+    assert approved.status == JobStatus.DELIVERED.value
+    assert approved.resolution_used == "512x512"
+    assert approved.output_path.endswith("keyframes.png")
+
+
+def test_create_job_rejects_unknown_kind(session, client):
+    with pytest.raises(service.MediaOpsError, match="unknown kind"):
+        service.create_job(session, client_id=client.id, campaign="c", prompt="p", kind="audio")
+
+
+def test_create_job_rejects_unknown_resolution(session, client):
+    with pytest.raises(service.MediaOpsError, match="unknown resolution"):
+        service.create_job(session, client_id=client.id, campaign="c", prompt="p", resolution="9999x9999")
+
+
+def test_create_job_rejects_reference_path_outside_allowed_dirs(session, client, tmp_path):
+    outside = tmp_path.parent / "outside-reference.png"
+    from PIL import Image
+
+    Image.new("RGB", (64, 64), (1, 2, 3)).save(outside)
+    with pytest.raises(service.MediaOpsError, match="must be inside"):
+        service.create_job(
+            session, client_id=client.id, campaign="c", prompt="p", reference_image_path=str(outside)
+        )
+
+
+def test_create_job_rejects_missing_reference_file(session, client, tmp_path):
+    missing = tmp_path / "does-not-exist.png"
+    with pytest.raises(service.MediaOpsError, match="does not exist"):
+        service.create_job(
+            session, client_id=client.id, campaign="c", prompt="p", reference_image_path=str(missing)
+        )
+
+
 def test_identity_qa_gate_fails_job_against_mismatched_reference(session, client, reference_image, tmp_path):
     from PIL import Image
 

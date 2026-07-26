@@ -18,6 +18,13 @@ DATABASE_URL = os.environ.get("DATABASE_URL", f"sqlite:///{BASE_DIR / 'mediaops.
 OUTPUT_DIR = Path(os.environ.get("OUTPUT_DIR", BASE_DIR / "outputs"))
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
+# reference_image_path is a server-side file path taken directly from an
+# unauthenticated caller — confine it to these directories (checked in
+# app.service._validate_reference_path) so it can't be used to read
+# arbitrary files off disk. A list, not a single constant, so tests can
+# point it at a tmp dir without touching the real project layout.
+REFERENCE_ALLOWED_DIRS = [BASE_DIR]
+
 # --- Provider chain -------------------------------------------------------
 # Primary is a real API call (OpenRouter -> Gemini image model). Secondary is
 # a deterministic local mock standing in for a second frontier provider

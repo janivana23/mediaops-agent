@@ -12,6 +12,7 @@ from app.models import Base, Client
 @pytest.fixture()
 def session(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "OUTPUT_DIR", tmp_path)
+    monkeypatch.setattr(config, "REFERENCE_ALLOWED_DIRS", [tmp_path])
     engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
     with Session(engine) as s:

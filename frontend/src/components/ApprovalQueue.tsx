@@ -9,6 +9,7 @@ export function ApprovalQueue({
   onDecide: (jobId: string, decision: 'approve' | 'reject') => Promise<void>
 }) {
   const [busy, setBusy] = useState<string | null>(null)
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
   if (approvals.length === 0) {
     return <p className="empty">Nothing waiting on a human right now.</p>
@@ -16,8 +17,12 @@ export function ApprovalQueue({
 
   const decide = async (jobId: string, decision: 'approve' | 'reject') => {
     setBusy(jobId)
+    setErrors(prev => ({ ...prev, [jobId]: '' }))
     try {
       await onDecide(jobId, decision)
+    } catch (err) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      setErrors(prev => ({ ...prev, [jobId]: msg ?? `Failed to ${decision} job` }))
     } finally {
       setBusy(null)
     }
@@ -30,6 +35,7 @@ export function ApprovalQueue({
           <div className="approval-meta">
             <div>Job {a.job_id}</div>
             <div className="reason">{a.reason}</div>
+            {errors[a.job_id] && <div className="error-text">{errors[a.job_id]}</div>}
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button

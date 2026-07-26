@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -26,6 +27,23 @@ log = logging.getLogger("mediaops.service")
 
 class MediaOpsError(Exception):
     """Raised for client-facing failures (unknown client, bad job state)."""
+
+
+def _validate_reference_path(reference_image_path: str) -> None:
+    """This API is unauthenticated and takes a server-side file path
+    directly from the caller — without this check it's an arbitrary local
+    file read (Pillow will happily open anything that parses as an image,
+    anywhere on disk). Confine references to config.REFERENCE_ALLOWED_DIRS,
+    which is where the documented workflow expects them to live
+    (backend/outputs/...)."""
+    resolved = Path(reference_image_path).expanduser().resolve()
+    allowed = [d.resolve() for d in config.REFERENCE_ALLOWED_DIRS]
+    if not any(resolved == base or base in resolved.parents for base in allowed):
+        raise MediaOpsError(
+            f"reference_image_path must be inside one of {allowed} (got {resolved})"
+        )
+    if not resolved.is_file():
+        raise MediaOpsError(f"reference_image_path does not exist: {resolved}")
 
 
 # --------------------------------------------------------------------------
@@ -52,7 +70,10 @@ def _affordable_resolution(remaining_cents: int, kind: str, provider: str, reque
     failing a job outright over a resolution choice. Never steps up past
     what was requested."""
     if kind == "video":
-        return "video" if cost_for(provider, kind, "video") <= remaining_cents else None
+        # Video is priced flat regardless of frame size (see costs.py), but
+        # the *string* returned here still has to be a real WxH — it's fed
+        # straight to the provider as the keyframe render resolution.
+        return requested if cost_for(provider, kind, "video") <= remaining_cents else None
     ladder = config.RESOLUTION_LADDER
     start = ladder.index(requested) if requested in ladder else 0
     for res in ladder[start:]:
@@ -78,6 +99,12 @@ def create_job(
     client = session.get(Client, client_id)
     if client is None:
         raise MediaOpsError(f"unknown client_id {client_id!r}")
+    if kind not in ("image", "video"):
+        raise MediaOpsError(f"unknown kind {kind!r} — must be 'image' or 'video'")
+    if kind != "video" and resolution not in config.RESOLUTION_LADDER:
+        raise MediaOpsError(f"unknown resolution {resolution!r} — must be one of {config.RESOLUTION_LADDER}")
+    if reference_image_path is not None:
+        _validate_reference_path(reference_image_path)
 
     provider = PROVIDER_ORDER[0]
     job = Job(

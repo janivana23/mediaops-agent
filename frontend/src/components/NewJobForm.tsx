@@ -64,11 +64,11 @@ export function NewJobForm({
         </select>
       </label>
       <label style={{ gridColumn: 'span 2' }}>
-        Reference image path (optional, server-side path)
+        Reference image path (optional, relative to the backend process, e.g. run from backend/)
         <input
           value={referenceImagePath}
           onChange={e => setReferenceImagePath(e.target.value)}
-          placeholder="backend/outputs/seed_reference.png"
+          placeholder="outputs/seed_reference.png"
         />
       </label>
       <button className="primary" type="submit" disabled={busy || !clientId}>
