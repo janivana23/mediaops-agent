@@ -1,0 +1,13 @@
+[build]
+builder = "nixpacks"
+buildCommand = "npm install && npm run build"
+
+[deploy]
+# Matches frontend/Dockerfile's own CMD exactly: Railway appears to build
+# via the Dockerfile regardless of `builder` above (multi-stage build logs
+# confirm it), and its final stage only copies dist/ + installs `serve`
+# globally - no package.json survives into it, so "npm run start" 404s
+# with ENOENT. Also needs `sh -c` - Railway execs startCommand directly,
+# it doesn't go through a shell, so a bare "$PORT" is never expanded.
+startCommand = "sh -c \"serve -s dist -l $PORT\""
+restartPolicyType = "always"

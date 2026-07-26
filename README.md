@@ -2,6 +2,11 @@
 
 [![CI](https://github.com/janivana23/mediaops-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/janivana23/mediaops-agent/actions/workflows/ci.yml)
 
+**Live demo:** [frontend-production-77ad.up.railway.app](https://frontend-production-77ad.up.railway.app)
+(backend: [backend-production-1f9e1.up.railway.app](https://backend-production-1f9e1.up.railway.app)
+— both on Railway, real Postgres, X-API-Key auth enabled. See
+[Deploying](#deploying) for how this was actually stood up.)
+
 A generative-media production pipeline with the business rules — budget
 limits, approval checkpoints, usage metering, provider failover, QA gates —
 enforced in the service layer itself, not left to an agent's good judgment.
@@ -251,7 +256,75 @@ This runs Postgres + the backend only (`:8000`) — run the frontend with
 hosting as its own service (e.g. Cloud Run) but isn't wired into
 `docker-compose.yml`, which is a local-dev file only.
 
-### Deploy to GCP Cloud Run
+### As an MCP server
+
+This repo already has a project-scoped `.mcp.json` (added via
+`claude mcp add mediaops --scope project -- backend/venv/bin/python
+backend/mcp_server.py`). Open Claude Code at the repo root and approve it
+once (`claude` will prompt), and `generate_asset`, `get_usage`,
+`list_pending_approvals`, `approve_job`, `reject_job`, and `list_jobs` are
+available as tools. The `.claude/skills/generate-campaign/` skill drives
+those tools through a full campaign batch — see that file for the
+procedure (check budget first, generate serially so each check is
+meaningful, stop and hand off to a human on `awaiting_approval` rather
+than trying to route around it).
+
+To run the server standalone, or against another MCP client:
+
+```bash
+cd backend && source venv/bin/activate
+python mcp_server.py
+# or inspect it: npx @modelcontextprotocol/inspector python mcp_server.py
+```
+
+## Deploying
+
+### Railway (this is what's actually live)
+
+Two services (`backend`, `frontend`) plus a managed Postgres, deployed via
+the Railway CLI (`railway up`, building remotely — no local Docker
+involved). `backend/railway.toml` and `frontend/railway.toml` pin the
+start command; both needed a real fix during setup, not just config:
+Railway execs `startCommand` directly rather than through a shell, so a
+bare `$PORT` is never expanded — it has to be `sh -c "... $PORT"`
+explicitly. `VITE_API_BASE_URL` is set as a `frontend` service variable
+and gets baked into the static build the same way as the Cloud Run path
+below (Vite env vars are build-time, not runtime).
+
+```bash
+railway login
+railway init --name mediaops-agent
+railway add --database postgres
+
+railway add --service backend
+railway variable set "DATABASE_URL=\${{Postgres.DATABASE_URL}}" --service backend --skip-deploys
+echo -n "sk-or-v1-..." | railway variable set OPENROUTER_API_KEY --service backend --skip-deploys --stdin
+echo -n "$(openssl rand -hex 24)" | railway variable set API_KEY --service backend --skip-deploys --stdin
+cd backend && railway up . --service backend --path-as-root --ci
+railway domain --service backend   # note this URL
+
+railway add --service frontend
+railway variable set "VITE_API_BASE_URL=<backend URL from above>" --service frontend --skip-deploys
+cd ../frontend && railway up . --service frontend --path-as-root --ci
+railway domain --service frontend
+
+# then tighten CORS_ORIGINS on backend from its temporary "*" to the
+# frontend URL you just got, once you have it
+```
+
+The database starts empty — `python -m app.seed` writes to whatever
+`DATABASE_URL` resolves to locally, and Railway's Postgres only exposes
+its public connection string as `DATABASE_PUBLIC_URL` (the plain
+`DATABASE_URL` is the *internal* Railway-network hostname, unreachable
+from outside). More importantly: don't seed via a local `DATABASE_URL`
+override and expect it to work end-to-end — the row gets written to the
+right database, but the *image file* still only exists on whichever
+machine ran the generation. Create jobs through the deployed API itself
+(`railway run` or plain `curl` against the live URL) so generation
+happens on that container and the output file and the database row that
+points at it live in the same place.
+
+### GCP Cloud Run
 
 `deploy/cloudrun-deploy.sh` deploys backend and frontend as two separate
 Cloud Run services, building both via Cloud Build (`gcloud builds submit`)
@@ -288,27 +361,6 @@ point they matter rather than glossed over:
   deployment should write `backend/outputs/` to a GCS bucket instead of
   local disk. Not implemented: doing that without a real bucket to test
   against would be guessing, not engineering.
-
-### As an MCP server
-
-This repo already has a project-scoped `.mcp.json` (added via
-`claude mcp add mediaops --scope project -- backend/venv/bin/python
-backend/mcp_server.py`). Open Claude Code at the repo root and approve it
-once (`claude` will prompt), and `generate_asset`, `get_usage`,
-`list_pending_approvals`, `approve_job`, `reject_job`, and `list_jobs` are
-available as tools. The `.claude/skills/generate-campaign/` skill drives
-those tools through a full campaign batch — see that file for the
-procedure (check budget first, generate serially so each check is
-meaningful, stop and hand off to a human on `awaiting_approval` rather
-than trying to route around it).
-
-To run the server standalone, or against another MCP client:
-
-```bash
-cd backend && source venv/bin/activate
-python mcp_server.py
-# or inspect it: npx @modelcontextprotocol/inspector python mcp_server.py
-```
 
 ## Tests
 
