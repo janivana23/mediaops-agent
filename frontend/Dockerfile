@@ -3,6 +3,13 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install
 COPY . .
+
+# Vite bakes these into the static bundle at build time, not runtime —
+# they have to be build args, not just env vars set on `docker run`.
+ARG VITE_API_BASE_URL=""
+ARG VITE_API_KEY=""
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+ENV VITE_API_KEY=${VITE_API_KEY}
 RUN npm run build
 
 FROM node:20-slim

@@ -144,6 +144,32 @@ def test_create_job_rejects_missing_reference_file(session, client, tmp_path):
         )
 
 
+def test_create_client_rejects_empty_name(session):
+    with pytest.raises(service.MediaOpsError, match="must not be empty"):
+        service.create_client(session, name="  ", monthly_budget_cents=1000)
+
+
+def test_create_client_rejects_non_positive_budget(session):
+    with pytest.raises(service.MediaOpsError, match="must be positive"):
+        service.create_client(session, name="New Client", monthly_budget_cents=0)
+
+
+def test_create_client_succeeds_and_is_listed(session):
+    created = service.create_client(session, name="New Client", monthly_budget_cents=2500)
+    assert created.monthly_budget_cents == 2500
+    assert created.id in [c.id for c in service.list_clients(session)]
+
+
+def test_list_jobs_pagination(session, client):
+    for i in range(5):
+        _job(session, client, campaign=f"Campaign {i}")
+    page1 = service.list_jobs(session, client_id=client.id, limit=2, offset=0)
+    page2 = service.list_jobs(session, client_id=client.id, limit=2, offset=2)
+    assert len(page1) == 2
+    assert len(page2) == 2
+    assert {j.id for j in page1}.isdisjoint({j.id for j in page2})
+
+
 def test_identity_qa_gate_fails_job_against_mismatched_reference(session, client, reference_image, tmp_path):
     from PIL import Image
 

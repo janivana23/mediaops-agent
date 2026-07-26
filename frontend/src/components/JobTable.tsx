@@ -1,3 +1,4 @@
+import { outputsBaseURL } from '../api'
 import type { JobOut } from '../types'
 
 const STATUS_CLASS: Record<string, string> = {
@@ -16,6 +17,18 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={`badge ${cls}`}>{status.replace('_', ' ')}</span>
 }
 
+function Thumbnail({ job }: { job: JobOut }) {
+  if (!job.output_path) {
+    return <div className="thumb-placeholder" aria-hidden="true" />
+  }
+  const src = `${outputsBaseURL}/outputs/${job.id}/${job.output_path.split('/').pop()}`
+  return (
+    <a href={src} target="_blank" rel="noreferrer" title={`Open full-size ${job.kind} output`}>
+      <img className="thumb-img" src={src} alt={`${job.kind} output for ${job.campaign}`} loading="lazy" />
+    </a>
+  )
+}
+
 export function JobTable({ jobs }: { jobs: JobOut[] }) {
   if (jobs.length === 0) {
     return <p className="empty">No jobs yet — submit one below, or run `python -m app.seed`.</p>
@@ -26,6 +39,7 @@ export function JobTable({ jobs }: { jobs: JobOut[] }) {
       <table>
         <thead>
           <tr>
+            <th>Output</th>
             <th>Campaign</th>
             <th>Prompt</th>
             <th>Status</th>
@@ -34,12 +48,12 @@ export function JobTable({ jobs }: { jobs: JobOut[] }) {
             <th className="num">Cost</th>
             <th className="num">Identity QA</th>
             <th className="num">Brand QA</th>
-            <th>Output</th>
           </tr>
         </thead>
         <tbody>
           {jobs.map(job => (
             <tr key={job.id}>
+              <td><Thumbnail job={job} /></td>
               <td>{job.campaign}</td>
               <td>{job.prompt}</td>
               <td>
@@ -55,20 +69,6 @@ export function JobTable({ jobs }: { jobs: JobOut[] }) {
               <td className="num">{job.actual_cost_cents != null ? `${job.actual_cost_cents}c` : '—'}</td>
               <td className="num">{job.qa_identity_score ?? '—'}</td>
               <td className="num">{job.qa_brand_score ?? '—'}</td>
-              <td>
-                {job.output_path ? (
-                  <a
-                    className="thumb-link"
-                    href={`/outputs/${job.id}/${job.output_path.split('/').pop()}`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    view
-                  </a>
-                ) : (
-                  '—'
-                )}
-              </td>
             </tr>
           ))}
         </tbody>

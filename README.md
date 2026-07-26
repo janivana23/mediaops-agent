@@ -1,5 +1,7 @@
 # MediaOps Agent
 
+[![CI](https://github.com/janivana23/mediaops-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/janivana23/mediaops-agent/actions/workflows/ci.yml)
+
 A generative-media production pipeline with the business rules — budget
 limits, approval checkpoints, usage metering, provider failover, QA gates —
 enforced in the service layer itself, not left to an agent's good judgment.
@@ -85,6 +87,22 @@ smaller one does, the service generates at the smaller size and records
 that it did — see `_affordable_resolution` in `app/service.py`. It never
 upsizes past what was requested.
 
+**6. Automation is a notification, not a dependency.** `app/notify.py`
+posts a plain JSON payload to `WEBHOOK_URL` on every job status change —
+the shape an n8n Webhook trigger node expects, no n8n SDK involved. It's
+called from inside `service.py` (not bolted on at the API layer) so both
+the REST and MCP surfaces fire it identically, and it's deliberately
+best-effort: a webhook timeout or an n8n outage logs a warning and moves
+on, it never fails or rolls back the job it's reporting on.
+
+**7. Auth is opt-in, not a separate mode.** `require_api_key` in
+`app/main.py` is a no-op unless `API_KEY` is set — the same
+zero-config-by-default pattern as everything else here (no key needed
+for `python -m app.seed` and a local demo; set one before this is
+reachable off localhost). `/health` and `/outputs` are deliberately left
+open: health checks need to work unauthenticated, and outputs are keyed
+by unguessable job ids rather than sequential ones.
+
 ## The hardest part
 
 Getting the *ordering* of the four checks right. Budget, approval,
@@ -160,14 +178,17 @@ backend/
     providers/       # gemini_openrouter.py (real), mock_seedance.py (local)
     qa.py            # identity-consistency + brand-compliance scoring
     service.py       # the guardrails — budget, approval, failover, QA
-    main.py          # FastAPI app (REST surface)
+    notify.py        # best-effort webhook (n8n-compatible) on job status change
+    main.py          # FastAPI app (REST surface, optional X-API-Key auth)
     seed.py          # demo clients + jobs walking every code path
   mcp_server.py       # MCP surface (FastMCP) — same service.py underneath
-  tests/              # pytest — budget, approval, stepdown, failover, QA
+  tests/              # pytest — budget, approval, stepdown, failover, QA, auth
 frontend/
-  src/                # React + Vite + TS dashboard
+  src/                # React + Vite + TS dashboard (thumbnails, client mgmt)
 .claude/skills/
   generate-campaign/  # Claude Agent Skill: batch-generate a campaign via MCP
+.github/workflows/ci.yml  # backend pytest + frontend build on every push
+deploy/cloudrun-deploy.sh  # GCP Cloud Run deploy (Cloud Build, no local Docker)
 docker-compose.yml    # Postgres + backend, for a production-like local run
 ```
 
@@ -227,11 +248,46 @@ docker compose up --build
 
 This runs Postgres + the backend only (`:8000`) — run the frontend with
 `npm run dev` against it as above. `frontend/Dockerfile` exists for static
-hosting (e.g. Cloud Run) but isn't wired into `docker-compose.yml`: the
-built static bundle calls `/api` same-origin, which needs a reverse proxy
-in front of both containers to route to the backend — a small
-nginx/Caddy config, deliberately left out here as out of scope for a
-local dev compose file.
+hosting as its own service (e.g. Cloud Run) but isn't wired into
+`docker-compose.yml`, which is a local-dev file only.
+
+### Deploy to GCP Cloud Run
+
+`deploy/cloudrun-deploy.sh` deploys backend and frontend as two separate
+Cloud Run services, building both via Cloud Build (`gcloud builds submit`)
+rather than a local Docker daemon — deliberately, since local Docker
+Desktop proved unreliable while building this. It bakes the backend's
+Cloud Run URL into the frontend's static build (`VITE_API_BASE_URL` — see
+`frontend/api.ts`), since two separately-deployed services have no shared
+origin for the dev-only `/api` proxy to paper over.
+
+```bash
+gcloud auth login
+gcloud config set project my-gcp-project
+gcloud services enable run.googleapis.com sqladmin.googleapis.com \
+    artifactregistry.googleapis.com cloudbuild.googleapis.com secretmanager.googleapis.com
+
+echo -n "sk-or-v1-..." | gcloud secrets create openrouter-api-key --data-file=-
+echo -n "$(openssl rand -hex 32)" | gcloud secrets create mediaops-api-key --data-file=-
+
+PROJECT_ID=my-gcp-project REGION=asia-southeast1 ./deploy/cloudrun-deploy.sh
+```
+
+**Read the script before running it.** It's real `gcloud` commands, not
+pseudocode, but it hasn't been run against a live GCP project — no
+credentials were available in the environment this was built in. Two
+things it deliberately does NOT solve, called out in comments at the
+point they matter rather than glossed over:
+
+- **SQLite doesn't survive on Cloud Run** — the filesystem is ephemeral
+  per-instance, wiped on cold start / scale-to-zero / redeploy. The script
+  comments show the exact Cloud SQL Postgres setup (`gcloud sql instances
+  create`, `--add-cloudsql-instances`) to swap in for anything beyond a
+  one-off demo.
+- **Generated outputs have the same ephemeral-disk problem** — a real
+  deployment should write `backend/outputs/` to a GCS bucket instead of
+  local disk. Not implemented: doing that without a real bucket to test
+  against would be guessing, not engineering.
 
 ### As an MCP server
 
@@ -256,14 +312,23 @@ python mcp_server.py
 
 ## Tests
 
-20 tests, all exercising `service.run_job`/`create_job` against a real
-in-memory SQLite DB (no mocked ORM) plus the QA scoring functions
-directly: budget-rejection, the approval checkpoint, approve/reject
-transitions, resolution stepdown, usage-ledger accumulation, provider
-failover (and total-failure), the identity/brand QA gate, video-job
-generation (regression test for a real bug — see below), and input
-validation (unknown kind/resolution, reference paths outside the allowed
-directory or that don't exist).
+36 tests: `service.run_job`/`create_job` against a real in-memory SQLite
+DB (no mocked ORM), the QA scoring functions directly, the webhook
+(fires with the right payload, and a delivery failure never breaks the
+job it's reporting on), and the FastAPI layer itself via `TestClient`
+with an isolated in-memory DB per test (the auth gate, the new
+`/clients` endpoint, pagination, and that a bad request returns a clean
+400 rather than a 500). Covers: budget-rejection, the approval
+checkpoint, approve/reject transitions, resolution stepdown,
+usage-ledger accumulation, provider failover (and total-failure), the
+identity/brand QA gate, video-job generation (regression test for a
+real bug — see above), and input validation.
+
+An autouse fixture keeps every test offline by default
+(`OPENROUTER_API_KEY`/`WEBHOOK_URL` forced empty) — without it, tests
+would silently pick up whatever's in a developer's real `.env` and hit
+the live network, which happened once while building this (masked as
+"passing" because failover swallowed the resulting error).
 
 ```bash
 cd backend && source venv/bin/activate && pytest tests/ -v

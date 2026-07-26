@@ -2,16 +2,20 @@ from __future__ import annotations
 
 import datetime as dt
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class ClientOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     name: str
     monthly_budget_cents: int
 
-    class Config:
-        from_attributes = True
+
+class CreateClientIn(BaseModel):
+    name: str
+    monthly_budget_cents: int
 
 
 class CreateJobIn(BaseModel):
@@ -24,6 +28,8 @@ class CreateJobIn(BaseModel):
 
 
 class JobOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     client_id: str
     campaign: str
@@ -41,18 +47,14 @@ class JobOut(BaseModel):
     qa_brand_score: float | None
     created_at: dt.datetime
 
-    class Config:
-        from_attributes = True
-
 
 class ApprovalOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     job_id: str
     reason: str
     status: str
-
-    class Config:
-        from_attributes = True
 
 
 class ApprovalDecisionIn(BaseModel):

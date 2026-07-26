@@ -46,3 +46,8 @@ export interface CreateJobIn {
   resolution: string
   reference_image_path?: string | null
 }
+
+export interface CreateClientIn {
+  name: string
+  monthly_budget_cents: number
+}

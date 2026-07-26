@@ -279,6 +279,31 @@ form.new-job input, form.new-job select {
   font-size: 12px;
 }
 
+.thumb-img {
+  display: block;
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--gridline);
+  transition: transform 0.15s ease;
+}
+
+.thumb-img:hover {
+  transform: scale(1.6);
+  position: relative;
+  z-index: 5;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.thumb-placeholder {
+  width: 56px;
+  height: 56px;
+  border-radius: 6px;
+  background: var(--gridline);
+}
+
 .empty {
   color: var(--muted);
   font-size: 13px;

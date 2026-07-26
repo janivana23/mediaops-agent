@@ -60,3 +60,16 @@ BRAND_PALETTE_HEX = os.environ.get(
 ).split(",")
 
 CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",")
+
+# --- Integrations -----------------------------------------------------------
+# Fires a plain JSON POST on job status changes — point this at an n8n
+# Webhook trigger node (or Slack, or anything else) to route job events
+# into a client-facing workflow. Empty = disabled (default, zero-config).
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "")
+WEBHOOK_TIMEOUT_SECONDS = float(os.environ.get("WEBHOOK_TIMEOUT_SECONDS", "3"))
+
+# --- API auth ----------------------------------------------------------------
+# Optional shared-secret header (X-API-Key). Empty = disabled (default) so
+# local dev and the seed/demo flow stay zero-config. Set this before putting
+# the API anywhere reachable off localhost — there's no other auth layer.
+API_KEY = os.environ.get("API_KEY", "")

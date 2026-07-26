@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app import config
 from app.costs import PROVIDER_ORDER, cost_for
 from app.models import ApprovalRequest, ApprovalStatus, Client, Job, JobStatus, UsageLedgerEntry
+from app.notify import send_job_event
 from app.providers import REGISTRY
 from app.providers.base import ProviderError
 from app.qa import brand_compliance_score, identity_similarity
@@ -156,6 +157,7 @@ def run_job(session: Session, job_id: str) -> Job:
         job.status = JobStatus.REJECTED.value
         job.status_reason = f"budget_exceeded: {remaining}c remaining, cheapest option is {cheapest_cost}c"
         session.commit()
+        send_job_event("job.rejected", job)
         return job
 
     requested_cost = cost_for(primary, job.kind, job.requested_resolution)
@@ -169,6 +171,7 @@ def run_job(session: Session, job_id: str) -> Job:
             ApprovalRequest(job_id=job.id, reason=job.status_reason, status=ApprovalStatus.PENDING.value)
         )
         session.commit()
+        send_job_event("job.awaiting_approval", job)
         return job
 
     resolution = _affordable_resolution(remaining, job.kind, primary, job.requested_resolution)
@@ -176,6 +179,7 @@ def run_job(session: Session, job_id: str) -> Job:
         job.status = JobStatus.REJECTED.value
         job.status_reason = "budget_exceeded: no resolution fits remaining budget"
         session.commit()
+        send_job_event("job.rejected", job)
         return job
 
     # Clear whatever status_reason got set on the way in here (e.g. the
@@ -212,6 +216,7 @@ def run_job(session: Session, job_id: str) -> Job:
         job.status = JobStatus.FAILED.value
         job.status_reason = "all providers failed: " + " | ".join(errors)
         session.commit()
+        send_job_event("job.failed", job)
         return job
 
     actual_cost = cost_for(used_provider, job.kind, resolution)
@@ -226,6 +231,7 @@ def run_job(session: Session, job_id: str) -> Job:
         job.status = JobStatus.REJECTED.value
         job.status_reason = "budget_exceeded: exhausted by a concurrent job"
         session.commit()
+        send_job_event("job.rejected", job)
         return job
 
     job.resolution_used = resolution
@@ -254,6 +260,7 @@ def run_job(session: Session, job_id: str) -> Job:
 
     session.commit()
     session.refresh(job)
+    send_job_event(f"job.{job.status}", job)
     return job
 
 
@@ -289,6 +296,7 @@ def reject_job(session: Session, job_id: str, decided_by: str, reason: str = "")
     job.status_reason = reason or "rejected by approver"
     session.commit()
     session.refresh(job)
+    send_job_event("job.rejected", job)
     return job
 
 
@@ -296,8 +304,10 @@ def reject_job(session: Session, job_id: str, decided_by: str, reason: str = "")
 # Read models
 # --------------------------------------------------------------------------
 
-def list_jobs(session: Session, client_id: str | None = None) -> list[Job]:
-    stmt = select(Job).order_by(Job.created_at.desc())
+def list_jobs(
+    session: Session, client_id: str | None = None, limit: int = 50, offset: int = 0
+) -> list[Job]:
+    stmt = select(Job).order_by(Job.created_at.desc()).limit(limit).offset(offset)
     if client_id:
         stmt = stmt.where(Job.client_id == client_id)
     return list(session.scalars(stmt))
@@ -310,6 +320,18 @@ def list_pending_approvals(session: Session) -> list[ApprovalRequest]:
 
 def list_clients(session: Session) -> list[Client]:
     return list(session.scalars(select(Client)))
+
+
+def create_client(session: Session, *, name: str, monthly_budget_cents: int) -> Client:
+    if not name.strip():
+        raise MediaOpsError("client name must not be empty")
+    if monthly_budget_cents <= 0:
+        raise MediaOpsError("monthly_budget_cents must be positive")
+    client = Client(name=name.strip(), monthly_budget_cents=monthly_budget_cents)
+    session.add(client)
+    session.commit()
+    session.refresh(client)
+    return client
 
 
 def usage_summary(session: Session, client_id: str) -> dict:

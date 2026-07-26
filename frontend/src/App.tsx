@@ -3,8 +3,9 @@ import { api } from './api'
 import { ApprovalQueue } from './components/ApprovalQueue'
 import { BudgetCard } from './components/BudgetCard'
 import { JobTable } from './components/JobTable'
+import { NewClientForm } from './components/NewClientForm'
 import { NewJobForm } from './components/NewJobForm'
-import type { ApprovalOut, ClientOut, CreateJobIn, JobOut, UsageOut } from './types'
+import type { ApprovalOut, ClientOut, CreateClientIn, CreateJobIn, JobOut, UsageOut } from './types'
 
 const POLL_MS = 4000
 
@@ -62,6 +63,12 @@ export default function App() {
     await refresh()
   }
 
+  const handleCreateClient = async (payload: CreateClientIn) => {
+    const created = await api.createClient(payload)
+    setClients(await api.listClients())
+    setSelectedClient(created.id)
+  }
+
   return (
     <>
       <header className="app-header">
@@ -83,6 +90,9 @@ export default function App() {
                 ))}
               </select>
             </label>
+            <div style={{ marginTop: 10 }}>
+              <NewClientForm onSubmit={handleCreateClient} />
+            </div>
             <div className="kpi-row" style={{ marginTop: 14 }}>
               <div className="stat-tile">
                 <div className="stat-value">{jobs.length}</div>

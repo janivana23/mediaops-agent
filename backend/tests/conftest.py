@@ -9,6 +9,18 @@ from app import config
 from app.models import Base, Client
 
 
+@pytest.fixture(autouse=True)
+def _offline_by_default(monkeypatch):
+    """Tests must never depend on whatever happens to be in a developer's
+    real .env — config.py loads it unconditionally, so without this a real
+    OPENROUTER_API_KEY on disk would make the suite hit the live network
+    (masked as "passing" because failover swallows the resulting
+    ProviderError, but slow, flaky, and not actually testing what it looks
+    like it's testing). Individual tests re-enable it explicitly."""
+    monkeypatch.setattr(config, "OPENROUTER_API_KEY", "")
+    monkeypatch.setattr(config, "WEBHOOK_URL", "")
+
+
 @pytest.fixture()
 def session(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "OUTPUT_DIR", tmp_path)
