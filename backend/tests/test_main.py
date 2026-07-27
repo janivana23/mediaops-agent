@@ -20,6 +20,7 @@ def api_client(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "OUTPUT_DIR", tmp_path)
     monkeypatch.setattr(config, "REFERENCE_ALLOWED_DIRS", [tmp_path])
     monkeypatch.setattr(config, "OPENROUTER_API_KEY", "")
+    monkeypatch.setattr(config, "OPENAI_API_KEY", "")
     monkeypatch.setattr(config, "WEBHOOK_URL", "")
     monkeypatch.setattr(config, "API_KEY", "")
 

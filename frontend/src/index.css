@@ -13,6 +13,8 @@
   --status-warning: #fab219;
   --status-serious: #ec835a;
   --status-critical: #d03b3b;
+  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --tab-active-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -27,6 +29,8 @@
     --border: rgba(255, 255, 255, 0.1);
     --series-blue: #3987e5;
     --series-blue-400: #3987e5;
+    --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+    --tab-active-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
   }
 }
 
@@ -42,24 +46,75 @@ body {
 }
 
 #root {
-  max-width: 1080px;
+  max-width: 1160px;
   margin: 0 auto;
-  padding: 32px 20px 64px;
+  padding: 28px 20px 64px;
 }
 
 header.app-header {
-  margin-bottom: 24px;
+  margin-bottom: 28px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--gridline);
+}
+
+.app-header-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.app-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.app-logo {
+  display: inline-block;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 9px;
+  background: linear-gradient(135deg, var(--series-blue-400), var(--status-good));
 }
 
 header.app-header h1 {
-  font-size: 22px;
-  margin: 0 0 4px;
+  font-size: 21px;
+  margin: 0 0 2px;
 }
 
 header.app-header p {
   color: var(--text-secondary);
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
+  max-width: 480px;
+}
+
+.tab-nav {
+  display: flex;
+  gap: 4px;
+  background: var(--gridline);
+  padding: 3px;
+  border-radius: 9px;
+  align-self: center;
+}
+
+.tab-nav button {
+  border: none;
+  background: transparent;
+  padding: 7px 14px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.tab-nav button.tab-active {
+  background: var(--surface-1);
+  color: var(--text-primary);
+  box-shadow: var(--tab-active-shadow);
 }
 
 .card {
@@ -67,6 +122,7 @@ header.app-header p {
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 16px 18px;
+  box-shadow: var(--card-shadow);
 }
 
 .grid-2 {
@@ -307,4 +363,108 @@ form.new-job input, form.new-job select {
 .empty {
   color: var(--muted);
   font-size: 13px;
+}
+
+/* Status-breakdown chart — thin horizontal bars, status palette, direct
+   labels (see dataviz skill: status colours reserved for state, never
+   reused as a generic categorical series). */
+.chart-root {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chart-row {
+  display: grid;
+  grid-template-columns: 130px 1fr 28px;
+  align-items: center;
+  gap: 10px;
+}
+
+.chart-row-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chart-row-track {
+  height: 10px;
+  border-radius: 4px;
+  background: var(--gridline);
+  overflow: hidden;
+}
+
+.chart-row-fill {
+  height: 100%;
+  border-radius: 4px;
+  min-width: 4px;
+}
+
+.chart-row-value {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  text-align: right;
+}
+
+/* How-it-works step flow */
+.steps-flow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.step-card {
+  position: relative;
+  flex: 1 1 180px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--card-shadow);
+  padding: 16px;
+}
+
+.step-number {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--series-blue-400);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.step-title {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+
+.step-body {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.step-arrow {
+  display: none;
+}
+
+@media (min-width: 860px) {
+  .step-arrow {
+    display: block;
+    position: absolute;
+    top: 50%;
+    right: -20px;
+    transform: translateY(-50%);
+    color: var(--muted);
+    font-size: 16px;
+  }
 }

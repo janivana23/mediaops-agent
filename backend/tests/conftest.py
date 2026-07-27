@@ -18,6 +18,7 @@ def _offline_by_default(monkeypatch):
     ProviderError, but slow, flaky, and not actually testing what it looks
     like it's testing). Individual tests re-enable it explicitly."""
     monkeypatch.setattr(config, "OPENROUTER_API_KEY", "")
+    monkeypatch.setattr(config, "OPENAI_API_KEY", "")
     monkeypatch.setattr(config, "WEBHOOK_URL", "")
 
 

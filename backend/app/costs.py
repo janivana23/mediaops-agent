@@ -12,6 +12,12 @@ COST_TABLE_CENTS: dict[str, dict[str, int]] = {
         "2048x2048": 150,
         "video": 300,
     },
+    "openai-images": {
+        "512x512": 20,
+        "1024x1024": 45,
+        "2048x2048": 135,
+        "video": 300,
+    },
     "mock-seedance": {
         "512x512": 20,
         "1024x1024": 40,
@@ -20,7 +26,8 @@ COST_TABLE_CENTS: dict[str, dict[str, int]] = {
     },
 }
 
-PROVIDER_ORDER = ["gemini-openrouter", "mock-seedance"]
+# Two real providers before ever touching the local mock.
+PROVIDER_ORDER = ["gemini-openrouter", "openai-images", "mock-seedance"]
 
 
 def cost_for(provider: str, kind: str, resolution: str) -> int:

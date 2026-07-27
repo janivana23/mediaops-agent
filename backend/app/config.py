@@ -26,10 +26,10 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 REFERENCE_ALLOWED_DIRS = [BASE_DIR]
 
 # --- Provider chain -------------------------------------------------------
-# Primary is a real API call (OpenRouter -> Gemini image model). Secondary is
-# a deterministic local mock standing in for a second frontier provider
-# (e.g. Seedance 2.0 via BytePlus). The service tries providers in order and
-# fails over on any error (missing key, timeout, non-2xx, rate limit).
+# Two independent real providers before ever touching the local mock — see
+# app.costs.PROVIDER_ORDER for the actual failover sequence. The service
+# tries each in order and fails over on any error (missing key, timeout,
+# non-2xx, rate limit, no credits).
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_BASE_URL = os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
 # Verify the current slug on https://openrouter.ai/models — image-gen model
@@ -37,6 +37,12 @@ OPENROUTER_BASE_URL = os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.
 OPENROUTER_IMAGE_MODEL = os.environ.get(
     "OPENROUTER_IMAGE_MODEL", "google/gemini-2.5-flash-image"
 )
+
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
+# Verify at https://platform.openai.com/docs/models — image model names move.
+OPENAI_IMAGE_MODEL = os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-1")
+
 PROVIDER_TIMEOUT_SECONDS = float(os.environ.get("PROVIDER_TIMEOUT_SECONDS", "20"))
 
 # --- Business rules (the part an agent is not allowed to talk its way around)

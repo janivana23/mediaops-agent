@@ -45,8 +45,9 @@ flowchart TB
         LEDGER["Usage ledger<br/>(append-only, spend is always derived)"]
     end
 
-    subgraph providers["Providers"]
-        GEMINI["gemini-openrouter<br/>(real API call)"]
+    subgraph providers["Providers, tried in order"]
+        GEMINI["gemini-openrouter<br/>(real, via OpenRouter)"]
+        OPENAI["openai-images<br/>(real, direct OpenAI)"]
         MOCK["mock-seedance<br/>(local, reference-anchored)"]
     end
 
@@ -54,8 +55,10 @@ flowchart TB
     REST --> BUDGET
     BUDGET --> APPROVAL --> RES --> FAILOVER
     FAILOVER --> GEMINI
+    FAILOVER -.on failure.-> OPENAI
     FAILOVER -.on failure.-> MOCK
     GEMINI --> QA
+    OPENAI --> QA
     MOCK --> QA
     QA --> LEDGER
 ```
@@ -155,22 +158,34 @@ read, and an unvalidated resolution string is an unhandled `KeyError`
   is set. Verify the model slug in `app/config.py` against
   [openrouter.ai/models](https://openrouter.ai/models) before relying on it
   — image-model catalogs move.
+- **`openai-images`** (`app/providers/openai_images.py`) is a real HTTP call
+  to OpenAI's `/v1/images/generations` endpoint directly (not through
+  OpenRouter) — a second, independent real provider so the failover chain
+  doesn't fall to the mock the moment one API has an outage or runs out of
+  credits (which happened to the OpenRouter key while building this — see
+  the commit history). It runs for real if `OPENAI_API_KEY` is set. OpenAI's
+  image models don't support every size in this app's own resolution
+  ladder (no 512 or 2048 square option), so requests are mapped to the
+  nearest size OpenAI actually accepts; the job is still billed at this
+  app's own per-resolution rate, not a pass-through of OpenAI's invoice.
 - **`mock-seedance`** (`app/providers/mock_seedance.py`) stands in for a
-  second frontier provider (e.g. Seedance 2.0 via BytePlus) with no network
-  call, so the whole pipeline runs offline. It's reference-anchored for
-  real, not just for show: when a reference image is supplied, its actual
-  pixels are composited into the output, which is what makes the
-  identity-consistency QA score meaningful without a real character-
-  consistency model underneath it.
+  third frontier provider (e.g. Seedance 2.0 via BytePlus) with no network
+  call, so the whole pipeline runs offline even with no API keys at all.
+  It's reference-anchored for real, not just for show: when a reference
+  image is supplied, its actual pixels are composited into the output,
+  which is what makes the identity-consistency QA score meaningful without
+  a real character-consistency model underneath it.
 - **Video** is rendered as a 3-keyframe contact sheet (a storyboard draft),
-  not an actual video file — real video generation is out of scope for a
-  provider this project doesn't have paid access to; the cost table and
+  not an actual video file — real video generation is out of scope for
+  providers this project doesn't have paid access to; the cost table and
   business-rule flow around it are otherwise identical to images.
 - **Postgres row-locking** for the budget race — see above.
 
-Swapping the mock for a real second provider is a one-file change
-(`app/providers/`) plus a line in `PROVIDER_ORDER` (`app/costs.py`) — the
-service layer doesn't know or care which provider actually generated a job.
+Adding `openai-images` this way — a new file in `app/providers/` plus one
+line in `PROVIDER_ORDER` (`app/costs.py`) — is the proof this design
+actually holds up: the service layer never needed to change to add a
+second real provider, because it never knew or cared which provider
+actually generated a job.
 
 ## Project layout
 
@@ -214,13 +229,13 @@ python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-`.env` is optional — the app runs end-to-end with no `OPENROUTER_API_KEY`,
-the mock provider serves everything. If you do want the real provider:
+`.env` is optional — the app runs end-to-end with no API keys at all, the
+mock provider serves everything. If you do want a real provider:
 
 ```bash
 cp .env.example .env
-# then edit .env and set OPENROUTER_API_KEY — never put a real key in
-# .env.example, that file is committed to git
+# then edit .env and set OPENROUTER_API_KEY and/or OPENAI_API_KEY — never
+# put a real key in .env.example, that file is committed to git
 ```
 
 ```bash
@@ -364,23 +379,24 @@ point they matter rather than glossed over:
 
 ## Tests
 
-36 tests: `service.run_job`/`create_job` against a real in-memory SQLite
+41 tests: `service.run_job`/`create_job` against a real in-memory SQLite
 DB (no mocked ORM), the QA scoring functions directly, the webhook
 (fires with the right payload, and a delivery failure never breaks the
-job it's reporting on), and the FastAPI layer itself via `TestClient`
-with an isolated in-memory DB per test (the auth gate, the new
-`/clients` endpoint, pagination, and that a bad request returns a clean
-400 rather than a 500). Covers: budget-rejection, the approval
-checkpoint, approve/reject transitions, resolution stepdown,
+job it's reporting on), the `openai-images` provider directly (mocked
+HTTP, including the resolution-mapping fallback), and the FastAPI layer
+itself via `TestClient` with an isolated in-memory DB per test (the auth
+gate, the new `/clients` endpoint, pagination, and that a bad request
+returns a clean 400 rather than a 500). Covers: budget-rejection, the
+approval checkpoint, approve/reject transitions, resolution stepdown,
 usage-ledger accumulation, provider failover (and total-failure), the
 identity/brand QA gate, video-job generation (regression test for a
 real bug — see above), and input validation.
 
 An autouse fixture keeps every test offline by default
-(`OPENROUTER_API_KEY`/`WEBHOOK_URL` forced empty) — without it, tests
-would silently pick up whatever's in a developer's real `.env` and hit
-the live network, which happened once while building this (masked as
-"passing" because failover swallowed the resulting error).
+(`OPENROUTER_API_KEY`/`OPENAI_API_KEY`/`WEBHOOK_URL` forced empty) —
+without it, tests would silently pick up whatever's in a developer's real
+`.env` and hit the live network, which happened once while building this
+(masked as "passing" because failover swallowed the resulting error).
 
 ```bash
 cd backend && source venv/bin/activate && pytest tests/ -v

@@ -1,16 +1,6 @@
 import { outputsBaseURL } from '../api'
+import { STATUS_CLASS } from '../statusStyles'
 import type { JobOut } from '../types'
-
-const STATUS_CLASS: Record<string, string> = {
-  delivered: 'status-good',
-  awaiting_approval: 'status-warning',
-  approved: 'status-warning',
-  qa_failed: 'status-serious',
-  rejected: 'status-critical',
-  failed: 'status-critical',
-  generating: 'status-muted',
-  pending: 'status-muted',
-}
 
 function StatusBadge({ status }: { status: string }) {
   const cls = STATUS_CLASS[status] ?? 'status-muted'

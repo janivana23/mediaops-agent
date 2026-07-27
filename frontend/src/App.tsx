@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from './api'
-import { ApprovalQueue } from './components/ApprovalQueue'
-import { BudgetCard } from './components/BudgetCard'
-import { JobTable } from './components/JobTable'
-import { NewClientForm } from './components/NewClientForm'
-import { NewJobForm } from './components/NewJobForm'
+import { Dashboard } from './components/Dashboard'
+import { HowItWorks } from './components/HowItWorks'
 import type { ApprovalOut, ClientOut, CreateClientIn, CreateJobIn, JobOut, UsageOut } from './types'
 
 const POLL_MS = 4000
+type Tab = 'dashboard' | 'how-it-works'
 
 export default function App() {
+  const [tab, setTab] = useState<Tab>('dashboard')
   const [clients, setClients] = useState<ClientOut[]>([])
   const [selectedClient, setSelectedClient] = useState<string>('')
   const [usage, setUsage] = useState<UsageOut | null>(null)
@@ -47,11 +46,6 @@ export default function App() {
     return () => clearInterval(id)
   }, [refresh])
 
-  const deliveredCosts = jobs.filter(j => j.status === 'delivered' && j.actual_cost_cents != null)
-  const costPerDeliverable = deliveredCosts.length
-    ? Math.round(deliveredCosts.reduce((sum, j) => sum + (j.actual_cost_cents ?? 0), 0) / deliveredCosts.length)
-    : null
-
   const handleDecide = async (jobId: string, decision: 'approve' | 'reject') => {
     if (decision === 'approve') await api.approve(jobId, 'demo@3echo.sg')
     else await api.reject(jobId, 'demo@3echo.sg', 'rejected from dashboard')
@@ -72,60 +66,48 @@ export default function App() {
   return (
     <>
       <header className="app-header">
-        <h1>MediaOps Agent</h1>
-        <p>Generative media pipeline — budget limits, approval checkpoints, and QA enforced server-side.</p>
+        <div className="app-header-top">
+          <div className="app-brand">
+            <span className="app-logo" aria-hidden="true" />
+            <div>
+              <h1>MediaOps Agent</h1>
+              <p>Generative media pipeline — budget limits, approval checkpoints, and QA enforced server-side.</p>
+            </div>
+          </div>
+          <nav className="tab-nav">
+            <button
+              className={tab === 'dashboard' ? 'tab-active' : ''}
+              onClick={() => setTab('dashboard')}
+            >
+              Dashboard
+            </button>
+            <button
+              className={tab === 'how-it-works' ? 'tab-active' : ''}
+              onClick={() => setTab('how-it-works')}
+            >
+              How it works
+            </button>
+          </nav>
+        </div>
       </header>
 
       {loadError && <p className="error-text">{loadError}</p>}
 
-      <section>
-        <h2>Client</h2>
-        <div className="grid-2">
-          <div className="card">
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--text-secondary)' }}>
-              Active client
-              <select value={selectedClient} onChange={e => setSelectedClient(e.target.value)}>
-                {clients.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </label>
-            <div style={{ marginTop: 10 }}>
-              <NewClientForm onSubmit={handleCreateClient} />
-            </div>
-            <div className="kpi-row" style={{ marginTop: 14 }}>
-              <div className="stat-tile">
-                <div className="stat-value">{jobs.length}</div>
-                <div className="stat-label">Jobs (this client)</div>
-              </div>
-              <div className="stat-tile">
-                <div className="stat-value">{approvals.length}</div>
-                <div className="stat-label">Awaiting approval (all clients)</div>
-              </div>
-              <div className="stat-tile">
-                <div className="stat-value">{costPerDeliverable != null ? `${costPerDeliverable}c` : '—'}</div>
-                <div className="stat-label">Avg cost / delivered asset</div>
-              </div>
-            </div>
-          </div>
-          {usage && <BudgetCard usage={usage} />}
-        </div>
-      </section>
-
-      <section>
-        <h2>Pending approvals</h2>
-        <ApprovalQueue approvals={approvals} onDecide={handleDecide} />
-      </section>
-
-      <section>
-        <h2>New job</h2>
-        <NewJobForm clientId={selectedClient} onSubmit={handleCreate} />
-      </section>
-
-      <section>
-        <h2>Jobs</h2>
-        <JobTable jobs={jobs} />
-      </section>
+      {tab === 'dashboard' ? (
+        <Dashboard
+          clients={clients}
+          selectedClient={selectedClient}
+          setSelectedClient={setSelectedClient}
+          usage={usage}
+          jobs={jobs}
+          approvals={approvals}
+          onDecide={handleDecide}
+          onCreateJob={handleCreate}
+          onCreateClient={handleCreateClient}
+        />
+      ) : (
+        <HowItWorks />
+      )}
     </>
   )
 }
