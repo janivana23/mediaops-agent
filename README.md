@@ -339,6 +339,30 @@ machine ran the generation. Create jobs through the deployed API itself
 happens on that container and the output file and the database row that
 points at it live in the same place.
 
+**Two more things that broke, both fixed for real:**
+
+- **Generated outputs didn't survive a redeploy.** Same root cause as
+  the Cloud Run caveat below — a plain container's filesystem is
+  ephemeral — except here it was directly visible: after redeploying,
+  every existing job's thumbnail 404'd, because the backend container
+  had been rebuilt from scratch and the database rows (Postgres, a
+  separate persistent service) still pointed at files that no longer
+  existed. Fixed with `railway volume add --mount-path /app/outputs`
+  attached to the backend service — a real persistent disk, not a
+  workaround.
+- **Git-based deploys built from the repo root, not the service
+  subdirectory.** After connecting both services to GitHub
+  (`railway service source connect --repo ... --branch main --service
+  backend`) instead of deploying by hand every time, the first
+  git-triggered build failed: Railway's builder found `.claude/`,
+  `backend/`, `frontend/`, `docker-compose.yml` at the repo root and had
+  nothing it recognized to build (no CLI flag exposes this — it's a
+  dashboard-only setting). Fixed by setting **Root Directory** to
+  `backend` / `frontend` in each service's Settings → Source, once, in
+  the dashboard. Every push to `main` now deploys both services
+  automatically — `railway up` by hand was a bootstrapping step, not
+  the steady state.
+
 ### GCP Cloud Run
 
 `deploy/cloudrun-deploy.sh` deploys backend and frontend as two separate
