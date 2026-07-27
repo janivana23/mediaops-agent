@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { api } from './api'
 import { Dashboard } from './components/Dashboard'
 import { HowItWorks } from './components/HowItWorks'
+import { IconLogoMark } from './components/icons'
 import type { ApprovalOut, ClientOut, CreateClientIn, CreateJobIn, JobOut, UsageOut } from './types'
 
 const POLL_MS = 4000
@@ -68,10 +69,13 @@ export default function App() {
       <header className="app-header">
         <div className="app-header-top">
           <div className="app-brand">
-            <span className="app-logo" aria-hidden="true" />
+            <span className="app-logo" aria-hidden="true">
+              <IconLogoMark width={20} height={20} />
+            </span>
             <div>
+              <span className="app-eyebrow">3echo · generative media ops</span>
               <h1>MediaOps Agent</h1>
-              <p>Generative media pipeline — budget limits, approval checkpoints, and QA enforced server-side.</p>
+              <p>Budget limits, approval checkpoints, and QA enforced server-side — not by the model.</p>
             </div>
           </div>
           <nav className="tab-nav">

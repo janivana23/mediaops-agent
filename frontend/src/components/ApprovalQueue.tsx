@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { IconCheckCircle } from './icons'
 import type { ApprovalOut } from '../types'
 
 export function ApprovalQueue({
@@ -12,7 +13,12 @@ export function ApprovalQueue({
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   if (approvals.length === 0) {
-    return <p className="empty">Nothing waiting on a human right now.</p>
+    return (
+      <div className="card empty">
+        <span className="empty-icon"><IconCheckCircle /></span>
+        Nothing waiting on a human right now.
+      </div>
+    )
   }
 
   const decide = async (jobId: string, decision: 'approve' | 'reject') => {

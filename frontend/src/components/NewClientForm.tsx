@@ -36,11 +36,11 @@ export function NewClientForm({ onSubmit }: { onSubmit: (payload: CreateClientIn
 
   return (
     <form onSubmit={submit} style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap' }}>
-      <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--text-secondary)' }}>
+      <label style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
         Client name
         <input value={name} onChange={e => setName(e.target.value)} required autoFocus />
       </label>
-      <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--text-secondary)' }}>
+      <label style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
         Monthly budget (USD)
         <input
           type="number"

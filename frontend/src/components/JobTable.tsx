@@ -1,4 +1,5 @@
 import { outputsBaseURL } from '../api'
+import { IconImage, IconInbox } from './icons'
 import { STATUS_CLASS } from '../statusStyles'
 import type { JobOut } from '../types'
 
@@ -9,7 +10,11 @@ function StatusBadge({ status }: { status: string }) {
 
 function Thumbnail({ job }: { job: JobOut }) {
   if (!job.output_path) {
-    return <div className="thumb-placeholder" aria-hidden="true" />
+    return (
+      <div className="thumb-placeholder" aria-hidden="true">
+        <IconImage />
+      </div>
+    )
   }
   const src = `${outputsBaseURL}/outputs/${job.id}/${job.output_path.split('/').pop()}`
   return (
@@ -21,11 +26,17 @@ function Thumbnail({ job }: { job: JobOut }) {
 
 export function JobTable({ jobs }: { jobs: JobOut[] }) {
   if (jobs.length === 0) {
-    return <p className="empty">No jobs yet — submit one below, or run `python -m app.seed`.</p>
+    return (
+      <div className="card empty">
+        <span className="empty-icon"><IconInbox /></span>
+        No jobs yet — submit one below, or run `python -m app.seed`.
+      </div>
+    )
   }
 
   return (
-    <div style={{ overflowX: 'auto' }}>
+    <div className="card table-card">
+      <div className="table-scroll">
       <table>
         <thead>
           <tr>
@@ -63,6 +74,7 @@ export function JobTable({ jobs }: { jobs: JobOut[] }) {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   )
 }

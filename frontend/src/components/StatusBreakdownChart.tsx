@@ -1,9 +1,15 @@
+import { IconBarChart } from './icons'
 import { STATUS_COLOR, STATUS_LABEL } from '../statusStyles'
 import type { JobOut } from '../types'
 
 export function StatusBreakdownChart({ jobs }: { jobs: JobOut[] }) {
   if (jobs.length === 0) {
-    return <p className="empty">No jobs yet — nothing to chart.</p>
+    return (
+      <div className="empty">
+        <span className="empty-icon"><IconBarChart /></span>
+        No jobs yet — nothing to chart.
+      </div>
+    )
   }
 
   const counts = new Map<string, number>()
@@ -15,7 +21,11 @@ export function StatusBreakdownChart({ jobs }: { jobs: JobOut[] }) {
   const total = jobs.length
 
   return (
-    <div className="chart-root" role="img" aria-label="Jobs by status">
+    <>
+      <div className="chart-head">
+        <span className="chart-total">{total} job{total === 1 ? '' : 's'} total</span>
+      </div>
+      <div className="chart-root" role="img" aria-label="Jobs by status">
       {rows.map(([status, count]) => {
         const pct = Math.round((count / total) * 100)
         const widthPct = (count / max) * 100
@@ -30,6 +40,7 @@ export function StatusBreakdownChart({ jobs }: { jobs: JobOut[] }) {
           </div>
         )
       })}
-    </div>
+      </div>
+    </>
   )
 }

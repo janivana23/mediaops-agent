@@ -1,3 +1,4 @@
+import { IconWallet } from './icons'
 import type { UsageOut } from '../types'
 
 function money(cents: number): string {
@@ -10,7 +11,9 @@ export function BudgetCard({ usage }: { usage: UsageOut }) {
 
   return (
     <div className="card">
-      <div className="client-name">{usage.client_name}</div>
+      <div className="client-name">
+        <IconWallet /> {usage.client_name}
+      </div>
       <div className="meter-track">
         <div
           className={`meter-fill${over ? ' over' : ''}`}
@@ -18,13 +21,17 @@ export function BudgetCard({ usage }: { usage: UsageOut }) {
         />
       </div>
       <div className="meter-label">
-        <span>{money(usage.used_cents)} used</span>
+        <span>{money(usage.used_cents)} used · {Math.round(pct)}%</span>
         <span>{money(usage.monthly_budget_cents)} budget</span>
       </div>
-      <div className="kpi-row" style={{ marginTop: 12 }}>
+      <div className="kpi-row" style={{ marginTop: 14 }}>
         <div className="stat-tile">
-          <div className="stat-value">{money(usage.remaining_cents)}</div>
-          <div className="stat-label">Remaining this month</div>
+          <div>
+            <div className="stat-value" style={{ color: over ? 'var(--status-critical)' : undefined }}>
+              {money(usage.remaining_cents)}
+            </div>
+            <div className="stat-label">Remaining this month</div>
+          </div>
         </div>
       </div>
     </div>

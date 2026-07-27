@@ -1,8 +1,10 @@
 import { ApprovalQueue } from './ApprovalQueue'
 import { BudgetCard } from './BudgetCard'
+import { IconBarChart, IconClock, IconCoins, IconLayers, IconSparkles } from './icons'
 import { JobTable } from './JobTable'
 import { NewClientForm } from './NewClientForm'
 import { NewJobForm } from './NewJobForm'
+import { SectionHeading } from './SectionHeading'
 import { StatusBreakdownChart } from './StatusBreakdownChart'
 import type { ApprovalOut, ClientOut, CreateClientIn, CreateJobIn, JobOut, UsageOut } from '../types'
 
@@ -35,10 +37,14 @@ export function Dashboard({
   return (
     <>
       <section>
-        <h2>Client</h2>
+        <SectionHeading
+          icon={<IconSparkles />}
+          title="Client"
+          subtitle="Who this run is billed to, and what's left in their monthly budget"
+        />
         <div className="grid-2">
           <div className="card">
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--text-secondary)' }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
               Active client
               <select value={selectedClient} onChange={e => setSelectedClient(e.target.value)}>
                 {clients.map(c => (
@@ -49,18 +55,27 @@ export function Dashboard({
             <div style={{ marginTop: 10 }}>
               <NewClientForm onSubmit={onCreateClient} />
             </div>
-            <div className="kpi-row" style={{ marginTop: 14 }}>
+            <div className="kpi-row" style={{ marginTop: 16 }}>
               <div className="stat-tile">
-                <div className="stat-value">{jobs.length}</div>
-                <div className="stat-label">Jobs (this client)</div>
+                <span className="stat-icon"><IconLayers /></span>
+                <div>
+                  <div className="stat-value">{jobs.length}</div>
+                  <div className="stat-label">Jobs (this client)</div>
+                </div>
               </div>
               <div className="stat-tile">
-                <div className="stat-value">{approvals.length}</div>
-                <div className="stat-label">Awaiting approval (all clients)</div>
+                <span className="stat-icon"><IconClock /></span>
+                <div>
+                  <div className="stat-value">{approvals.length}</div>
+                  <div className="stat-label">Awaiting approval</div>
+                </div>
               </div>
               <div className="stat-tile">
-                <div className="stat-value">{costPerDeliverable != null ? `${costPerDeliverable}c` : '—'}</div>
-                <div className="stat-label">Avg cost / delivered asset</div>
+                <span className="stat-icon"><IconCoins /></span>
+                <div>
+                  <div className="stat-value">{costPerDeliverable != null ? `${costPerDeliverable}c` : '—'}</div>
+                  <div className="stat-label">Avg cost / asset</div>
+                </div>
               </div>
             </div>
           </div>
@@ -69,24 +84,28 @@ export function Dashboard({
       </section>
 
       <section>
-        <h2>Jobs by status</h2>
+        <SectionHeading icon={<IconBarChart />} title="Jobs by status" />
         <div className="card">
           <StatusBreakdownChart jobs={jobs} />
         </div>
       </section>
 
       <section>
-        <h2>Pending approvals</h2>
+        <SectionHeading
+          icon={<IconClock />}
+          title="Pending approvals"
+          subtitle="Nothing here auto-generates until a human signs off"
+        />
         <ApprovalQueue approvals={approvals} onDecide={onDecide} />
       </section>
 
       <section>
-        <h2>New job</h2>
+        <SectionHeading icon={<IconSparkles />} title="New job" />
         <NewJobForm clientId={selectedClient} onSubmit={onCreateJob} />
       </section>
 
       <section>
-        <h2>Jobs</h2>
+        <SectionHeading icon={<IconLayers />} title="Jobs" />
         <JobTable jobs={jobs} />
       </section>
     </>
