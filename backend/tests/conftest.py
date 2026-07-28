@@ -20,6 +20,10 @@ def _offline_by_default(monkeypatch):
     monkeypatch.setattr(config, "OPENROUTER_API_KEY", "")
     monkeypatch.setattr(config, "OPENAI_API_KEY", "")
     monkeypatch.setattr(config, "WEBHOOK_URL", "")
+    # Keyless providers can't be disabled by blanking a credential, so this
+    # one needs its own switch — otherwise every test that runs a job would
+    # quietly make a real HTTP call to a third party.
+    monkeypatch.setattr(config, "POLLINATIONS_ENABLED", False)
 
 
 @pytest.fixture()

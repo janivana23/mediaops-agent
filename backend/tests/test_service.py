@@ -207,6 +207,38 @@ def test_failover_reason_is_recorded_on_a_delivered_job(session, client, monkeyp
     assert "OPENROUTER_API_KEY not set" in job.status_reason
 
 
+def test_upscale_is_disclosed_on_the_job(session, client, monkeypatch):
+    """A provider that renders below the requested size and upscales must say
+    so. Otherwise the job row claims a resolution the pixels can't back up —
+    the same self-reported-success problem the QA gate exists to catch."""
+    from app.providers.base import GenerationResult
+
+    def fake_generate(**kw):
+        real = mock_seedance.generate(**kw)
+        return GenerationResult(
+            output_path=real.output_path,
+            provider_name=real.provider_name,
+            seed=real.seed,
+            native_size="768x768",
+        )
+
+    monkeypatch.setattr(service.REGISTRY["gemini-openrouter"], "generate", fake_generate)
+    job = _job(session, client, resolution="1024x1024")
+
+    assert job.status == JobStatus.DELIVERED.value
+    assert "upscaled from 768x768" in job.status_reason
+
+
+def test_no_upscale_note_when_provider_renders_natively(session, client, monkeypatch):
+    monkeypatch.setattr(
+        service.REGISTRY["gemini-openrouter"],
+        "generate",
+        lambda **kw: mock_seedance.generate(**kw),
+    )
+    job = _job(session, client, resolution="1024x1024")
+    assert job.status_reason is None
+
+
 def test_no_failover_note_when_first_provider_succeeds(session, client, monkeypatch):
     monkeypatch.setattr(
         service.REGISTRY["gemini-openrouter"],

@@ -18,6 +18,15 @@ COST_TABLE_CENTS: dict[str, dict[str, int]] = {
         "2048x2048": 135,
         "video": 300,
     },
+    # Free and keyless, so the billed rate is zero. It still sits in the cost
+    # table because every other part of the system (budget check, approval
+    # threshold, ledger) reads costs from here and must not special-case it.
+    "pollinations": {
+        "512x512": 0,
+        "1024x1024": 0,
+        "2048x2048": 0,
+        "video": 0,
+    },
     "mock-seedance": {
         "512x512": 20,
         "1024x1024": 40,
@@ -26,8 +35,11 @@ COST_TABLE_CENTS: dict[str, dict[str, int]] = {
     },
 }
 
-# Two real providers before ever touching the local mock.
-PROVIDER_ORDER = ["gemini-openrouter", "openai-images", "mock-seedance"]
+# Paid providers first (better quality), then the free keyless one, and only
+# then the local mock. Ordering is deliberately *not* cheapest-first: the
+# mock is a last-resort placeholder, not a budget option, so it must stay at
+# the end even though `pollinations` now undercuts it on price.
+PROVIDER_ORDER = ["gemini-openrouter", "openai-images", "pollinations", "mock-seedance"]
 
 
 def cost_for(provider: str, kind: str, resolution: str) -> int:

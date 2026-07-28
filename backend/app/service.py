@@ -241,6 +241,17 @@ def run_job(session: Session, job_id: str) -> Job:
     # container logs that scroll away on the next redeploy.
     failover_note = "failed over — " + " | ".join(errors) if errors else None
 
+    # A provider whose free tier renders below the requested size upscales to
+    # meet it. That's a legitimate pipeline step, but it must be stated: the
+    # delivered file is the requested resolution, yet it does not carry that
+    # much real detail, and a reviewer comparing two "1024x1024" assets
+    # deserves to know which one was interpolated up from 768.
+    upscale_note = (
+        f"upscaled from {result.native_size} — provider rendered below the requested {resolution}"
+        if result.native_size and result.native_size != resolution
+        else None
+    )
+
     def _reason(*notes: str | None) -> str | None:
         """Join whichever notes actually apply, preserving earlier ones.
 
@@ -266,7 +277,7 @@ def run_job(session: Session, job_id: str) -> Job:
     brand_ok = job.qa_brand_score is None or job.qa_brand_score >= config.QA_BRAND_THRESHOLD
     if identity_ok and brand_ok:
         job.status = JobStatus.DELIVERED.value
-        job.status_reason = _reason(stepdown_note, failover_note)
+        job.status_reason = _reason(stepdown_note, upscale_note, failover_note)
     else:
         job.status = JobStatus.QA_FAILED.value
         reasons = []
@@ -275,7 +286,7 @@ def run_job(session: Session, job_id: str) -> Job:
         if not brand_ok:
             reasons.append(f"brand {job.qa_brand_score} < {config.QA_BRAND_THRESHOLD}")
         qa_note = "qa_failed: " + ", ".join(reasons)
-        job.status_reason = _reason(qa_note, stepdown_note, failover_note)
+        job.status_reason = _reason(qa_note, stepdown_note, upscale_note, failover_note)
 
     session.commit()
     session.refresh(job)

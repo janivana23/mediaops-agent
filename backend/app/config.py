@@ -49,6 +49,15 @@ OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
 # Verify at https://platform.openai.com/docs/models — image model names move.
 OPENAI_IMAGE_MODEL = os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-1")
 
+# Keyless and free — deliberately has no API-key setting, which is the whole
+# point: it lets the failover chain reach a real image model on a fresh clone
+# with no signup. Free also means best-effort, so it sits behind both paid
+# providers and is never the primary. See providers/pollinations.py.
+POLLINATIONS_BASE_URL = os.environ.get("POLLINATIONS_BASE_URL", "https://image.pollinations.ai")
+# Empty disables it entirely, for deployments that must not call out to an
+# unauthenticated third party.
+POLLINATIONS_ENABLED = os.environ.get("POLLINATIONS_ENABLED", "1") not in ("0", "false", "False", "")
+
 # Image generation is far slower than a text completion — measured runs of
 # gemini-2.5-flash-image via OpenRouter took well over 20s. Too low a value
 # here is indistinguishable from "provider is down": the request times out,

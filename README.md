@@ -48,6 +48,7 @@ flowchart TB
     subgraph providers["Providers, tried in order"]
         GEMINI["gemini-openrouter<br/>(real, via OpenRouter)"]
         OPENAI["openai-images<br/>(real, direct OpenAI)"]
+        POLLI["pollinations<br/>(real, free + keyless)"]
         MOCK["mock-seedance<br/>(local, reference-anchored)"]
     end
 
@@ -208,6 +209,35 @@ read, and an unvalidated resolution string is an unhandled `KeyError`
   ladder (no 512 or 2048 square option), so requests are mapped to the
   nearest size OpenAI actually accepts; the job is still billed at this
   app's own per-resolution rate, not a pass-through of OpenAI's invoice.
+- **`pollinations`** (`app/providers/pollinations.py`) is a real image model
+  that needs **no API key and no billing**, which is why it exists: both
+  providers above are gated behind a funded account, and a demo that can
+  only ever reach `mock-seedance` fails to show the actual point — that
+  these guardrails wrap a *real* generation call. With this in the chain, a
+  fresh `git clone` with no credentials still produces real assets.
+
+  Being free makes it best-effort, and two of its behaviours are handled
+  explicitly rather than trusted:
+
+  - It **caps output at 768×768** and gives no warning — ask for 1024 or
+    2048 and you get 768 back with a `200`. Passing that through would put
+    "2048x2048" on a job row next to a file that is nothing of the sort, so
+    the provider measures what actually arrived, upscales to the requested
+    size, and records the native size. The job then reads *"upscaled from
+    768x768 — provider rendered below the requested 1024x1024"*. The asset
+    is the size it claims; the note says how much real detail is behind it.
+  - It **returns HTML error pages with a `200`** when overloaded, so a
+    success status is not treated as proof of an image — the bytes are
+    decoded before the file is written, and a failure to decode is a
+    `ProviderError` like any other, which fails over to the mock.
+
+  It is priced at 0¢ in the cost table because that is what it costs. Note
+  the consequence: jobs it serves consume no budget, so the budget bar stops
+  moving. The pre-flight check still reserves against the *primary*
+  provider's price (reserve at worst case, bill actual), so the guardrail
+  itself is unaffected — but on a demo with no paid key configured, the
+  budget-exhaustion path is best shown with the seeded jobs rather than by
+  generating new ones.
 - **`mock-seedance`** (`app/providers/mock_seedance.py`) stands in for a
   third frontier provider (e.g. Seedance 2.0 via BytePlus) with no network
   call, so the whole pipeline runs offline even with no API keys at all.
@@ -449,11 +479,13 @@ point they matter rather than glossed over:
 
 ## Tests
 
-41 tests: `service.run_job`/`create_job` against a real in-memory SQLite
+61 tests: `service.run_job`/`create_job` against a real in-memory SQLite
 DB (no mocked ORM), the QA scoring functions directly, the webhook
 (fires with the right payload, and a delivery failure never breaks the
-job it's reporting on), the `openai-images` provider directly (mocked
-HTTP, including the resolution-mapping fallback), and the FastAPI layer
+job it's reporting on), the `openai-images` and `pollinations` providers
+directly (mocked HTTP — including the resolution-mapping fallback, the
+768px cap and its upscale disclosure, and the HTML-error-page-with-200
+case), and the FastAPI layer
 itself via `TestClient` with an isolated in-memory DB per test (the auth
 gate, the new `/clients` endpoint, pagination, and that a bad request
 returns a clean 400 rather than a 500). Covers: budget-rejection, the
