@@ -415,7 +415,25 @@ machine ran the generation. Create jobs through the deployed API itself
 happens on that container and the output file and the database row that
 points at it live in the same place.
 
-**Two more things that broke, both fixed for real:**
+**Three more things that broke, all fixed for real:**
+
+- **A bug the local test suite structurally could not catch.** A
+  1024×1024 job returned HTTP 500 in production while all 61 tests
+  passed locally. `Job.status_reason` is `String(300)`, and it's
+  assembled from provider error text this app doesn't control — a single
+  OpenRouter 402 body is ~250 characters on its own, so adding the
+  upscale note pushed the combined string over the limit. **Postgres
+  enforces `varchar` length and raised `StringDataRightTruncation`;
+  SQLite ignores it entirely.** The local suite runs on SQLite, so no
+  amount of additional local testing would have found this — the
+  difference is in the database, not the code path. Fixed by clamping in
+  code rather than widening the column, because the app builds tables
+  with `create_all`, which will not `ALTER` an existing production table;
+  widening would have needed a migration the deploy can't run. The
+  regression test asserts the resulting length directly instead of
+  expecting the database to reject it, since under SQLite it never
+  would. Per-provider errors are also clipped before joining, so one
+  verbose upstream can't crowd the others out of the failover trail.
 
 - **Generated outputs didn't survive a redeploy.** Same root cause as
   the Cloud Run caveat below — a plain container's filesystem is
