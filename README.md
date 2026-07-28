@@ -158,6 +158,20 @@ read, and an unvalidated resolution string is an unhandled `KeyError`
   is set. Verify the model slug in `app/config.py` against
   [openrouter.ai/models](https://openrouter.ai/models) before relying on it
   — image-model catalogs move.
+
+  Two settings on this path are load-bearing and were both found the hard
+  way, because getting either wrong looks identical from the outside — the
+  job succeeds, quietly, from the mock:
+
+  - `OPENROUTER_MAX_TOKENS` — OpenRouter pre-authorises `max_tokens` worth
+    of credit *before* generating. Omit it and they reserve the model's full
+    context ceiling (~29k tokens), so a funded-but-low account is refused
+    with HTTP 402 for a request whose image only costs ~1290 completion
+    tokens. Capping the reservation is the difference between a working
+    provider and a permanently-mocked one.
+  - `PROVIDER_TIMEOUT_SECONDS` — image generation runs well past the 20s
+    that was fine for text. A timeout raises `ProviderError`, which the
+    chain treats as "provider is down" and fails over.
 - **`openai-images`** (`app/providers/openai_images.py`) is a real HTTP call
   to OpenAI's `/v1/images/generations` endpoint directly (not through
   OpenRouter) — a second, independent real provider so the failover chain
@@ -180,6 +194,12 @@ read, and an unvalidated resolution string is an unhandled `KeyError`
   providers this project doesn't have paid access to; the cost table and
   business-rule flow around it are otherwise identical to images.
 - **Postgres row-locking** for the budget race — see above.
+
+Because a silent failover is the hardest state to debug, a job that fell
+through to a later provider records the whole trail in `status_reason` and
+shows it under the status badge in the dashboard — so "why does this say
+`mock-seedance`?" is answerable from the UI rather than from container logs
+that scroll away on the next redeploy.
 
 Adding `openai-images` this way — a new file in `app/providers/` plus one
 line in `PROVIDER_ORDER` (`app/costs.py`) — is the proof this design

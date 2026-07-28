@@ -187,3 +187,32 @@ def test_identity_qa_gate_fails_job_against_mismatched_reference(session, client
 
     assert job.qa_identity_score is not None
     assert job.status in (JobStatus.QA_FAILED.value, JobStatus.DELIVERED.value)
+
+
+def test_failover_reason_is_recorded_on_a_delivered_job(session, client, monkeypatch):
+    """A job that quietly came from the mock must say why on the job itself.
+
+    Before this, `errors` was only surfaced when *every* provider failed, so
+    the common case — real provider down, mock succeeds — left no trace
+    anywhere except container logs.
+    """
+    monkeypatch.setattr(config, "OPENROUTER_API_KEY", "")
+    monkeypatch.setattr(config, "OPENAI_API_KEY", "")
+    job = _job(session, client)
+
+    assert job.status == JobStatus.DELIVERED.value
+    assert job.provider_used == "mock-seedance"
+    assert job.status_reason is not None
+    assert "gemini-openrouter" in job.status_reason
+    assert "OPENROUTER_API_KEY not set" in job.status_reason
+
+
+def test_no_failover_note_when_first_provider_succeeds(session, client, monkeypatch):
+    monkeypatch.setattr(
+        service.REGISTRY["gemini-openrouter"],
+        "generate",
+        lambda **kw: mock_seedance.generate(**kw),
+    )
+    job = _job(session, client)
+    assert job.provider_used == "gemini-openrouter"
+    assert job.status_reason is None

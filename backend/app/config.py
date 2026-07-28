@@ -37,13 +37,23 @@ OPENROUTER_BASE_URL = os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.
 OPENROUTER_IMAGE_MODEL = os.environ.get(
     "OPENROUTER_IMAGE_MODEL", "google/gemini-2.5-flash-image"
 )
+# OpenRouter reserves max_tokens worth of credit up front, before generating.
+# Omitting it makes them reserve the model's full context ceiling (~29k tokens
+# on gemini-2.5-flash-image), so a low-balance account gets a 402 even though
+# the image itself only costs ~1290 completion tokens. Cap the reservation to
+# something just above one image so the credit check reflects real cost.
+OPENROUTER_MAX_TOKENS = int(os.environ.get("OPENROUTER_MAX_TOKENS", "2000"))
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
 # Verify at https://platform.openai.com/docs/models — image model names move.
 OPENAI_IMAGE_MODEL = os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-1")
 
-PROVIDER_TIMEOUT_SECONDS = float(os.environ.get("PROVIDER_TIMEOUT_SECONDS", "20"))
+# Image generation is far slower than a text completion — measured runs of
+# gemini-2.5-flash-image via OpenRouter took well over 20s. Too low a value
+# here is indistinguishable from "provider is down": the request times out,
+# ProviderError is raised, and the chain silently falls through to the mock.
+PROVIDER_TIMEOUT_SECONDS = float(os.environ.get("PROVIDER_TIMEOUT_SECONDS", "90"))
 
 # --- Business rules (the part an agent is not allowed to talk its way around)
 # Jobs costing more than this are never auto-generated, regardless of

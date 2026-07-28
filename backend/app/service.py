@@ -234,6 +234,23 @@ def run_job(session: Session, job_id: str) -> Job:
         send_job_event("job.rejected", job)
         return job
 
+    # A provider that failed *before* a later one succeeded is the single
+    # most confusing state to debug from the outside: the job looks fine, it
+    # just quietly came from the mock. Keep the trail on the job so "why is
+    # this mock-seedance?" is answerable from the dashboard rather than from
+    # container logs that scroll away on the next redeploy.
+    failover_note = "failed over — " + " | ".join(errors) if errors else None
+
+    def _reason(*notes: str | None) -> str | None:
+        """Join whichever notes actually apply, preserving earlier ones.
+
+        status_reason carries several independent facts (resolution
+        step-down, provider failover, QA scores) and any of them can
+        co-occur — assigning it directly silently drops the others.
+        """
+        present = [n for n in notes if n]
+        return "; ".join(present) if present else None
+
     job.resolution_used = resolution
     job.provider_used = used_provider
     job.actual_cost_cents = actual_cost
@@ -249,6 +266,7 @@ def run_job(session: Session, job_id: str) -> Job:
     brand_ok = job.qa_brand_score is None or job.qa_brand_score >= config.QA_BRAND_THRESHOLD
     if identity_ok and brand_ok:
         job.status = JobStatus.DELIVERED.value
+        job.status_reason = _reason(stepdown_note, failover_note)
     else:
         job.status = JobStatus.QA_FAILED.value
         reasons = []
@@ -256,7 +274,8 @@ def run_job(session: Session, job_id: str) -> Job:
             reasons.append(f"identity {job.qa_identity_score} < {config.QA_IDENTITY_THRESHOLD}")
         if not brand_ok:
             reasons.append(f"brand {job.qa_brand_score} < {config.QA_BRAND_THRESHOLD}")
-        job.status_reason = "qa_failed: " + ", ".join(reasons)
+        qa_note = "qa_failed: " + ", ".join(reasons)
+        job.status_reason = _reason(qa_note, stepdown_note, failover_note)
 
     session.commit()
     session.refresh(job)

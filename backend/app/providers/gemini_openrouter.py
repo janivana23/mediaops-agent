@@ -49,6 +49,11 @@ def generate(
                 "model": config.OPENROUTER_IMAGE_MODEL,
                 "messages": [{"role": "user", "content": full_prompt}],
                 "modalities": ["image", "text"],
+                # Required, not optional: OpenRouter pre-authorises max_tokens
+                # worth of credit before generating, and defaults to the
+                # model's full ceiling. Without this a funded-but-low account
+                # 402s on a request that would actually have cost cents.
+                "max_tokens": config.OPENROUTER_MAX_TOKENS,
             },
             timeout=config.PROVIDER_TIMEOUT_SECONDS,
         )
