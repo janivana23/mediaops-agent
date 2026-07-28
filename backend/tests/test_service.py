@@ -239,6 +239,48 @@ def test_no_upscale_note_when_provider_renders_natively(session, client, monkeyp
     assert job.status_reason is None
 
 
+def test_status_reason_never_exceeds_the_column_limit(session, client, monkeypatch):
+    """status_reason is String(300) and is built from provider error text we
+    don't control. Postgres raises DataError on overflow; SQLite (used here)
+    silently accepts any length — so this asserts the length directly rather
+    than relying on the DB to reject it. Caught in production, not by tests:
+    a real OpenRouter 402 body plus an upscale note ran past 300 and 500'd
+    the endpoint while every local test still passed.
+    """
+    from app.providers.base import ProviderError
+
+    def verbose_failure(**kw):
+        raise ProviderError("x" * 400)
+
+    for name in ("gemini-openrouter", "openai-images", "pollinations"):
+        monkeypatch.setattr(service.REGISTRY[name], "generate", verbose_failure)
+
+    job = _job(session, client, resolution="1024x1024")
+
+    assert job.status_reason is not None
+    assert len(job.status_reason) <= 300
+    # The trail must still name the providers, not just be a wall of x's.
+    assert "gemini-openrouter" in job.status_reason
+
+
+def test_every_provider_appears_in_a_clipped_failover_trail(session, client, monkeypatch):
+    """One verbose upstream must not crowd the others out of the trail."""
+    from app.providers.base import ProviderError
+
+    def boom(name):
+        def _f(**kw):
+            raise ProviderError(f"{name}-detail " + "y" * 300)
+        return _f
+
+    for name in ("gemini-openrouter", "openai-images", "pollinations"):
+        monkeypatch.setattr(service.REGISTRY[name], "generate", boom(name))
+
+    job = _job(session, client)
+
+    for name in ("gemini-openrouter", "openai-images", "pollinations"):
+        assert name in job.status_reason
+
+
 def test_no_failover_note_when_first_provider_succeeds(session, client, monkeypatch):
     monkeypatch.setattr(
         service.REGISTRY["gemini-openrouter"],

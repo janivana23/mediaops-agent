@@ -25,6 +25,27 @@ from app.qa import brand_compliance_score, identity_similarity
 
 log = logging.getLogger("mediaops.service")
 
+# Job.status_reason is String(300). Postgres enforces that and raises
+# DataError on overflow; SQLite silently accepts any length, so an
+# over-long reason passes every local test and only fails in production.
+# Since the value is assembled from provider error text we don't control
+# (a single OpenRouter 402 body is ~250 chars on its own), it has to be
+# clamped in code rather than assumed to fit.
+MAX_STATUS_REASON_CHARS = 300
+# Each provider's error is capped before joining so one verbose upstream
+# can't crowd the others out of the trail — with several providers, the
+# last one's message is usually the one you actually need.
+MAX_PROVIDER_ERROR_CHARS = 110
+
+
+def _clip(text: str, limit: int) -> str:
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+
+
+def _fit_status_reason(text: str | None) -> str | None:
+    """Clamp a composed status_reason to what the column can hold."""
+    return _clip(text, MAX_STATUS_REASON_CHARS) if text else text
+
 
 class MediaOpsError(Exception):
     """Raised for client-facing failures (unknown client, bad job state)."""
@@ -208,13 +229,13 @@ def run_job(session: Session, job_id: str) -> Job:
             used_provider = provider_name
             break
         except ProviderError as exc:
-            errors.append(f"{provider_name}: {exc}")
+            errors.append(f"{provider_name}: {_clip(str(exc), MAX_PROVIDER_ERROR_CHARS)}")
             log.warning("provider %s failed for job %s, failing over: %s", provider_name, job.id, exc)
             continue
 
     if result is None:
         job.status = JobStatus.FAILED.value
-        job.status_reason = "all providers failed: " + " | ".join(errors)
+        job.status_reason = _fit_status_reason("all providers failed: " + " | ".join(errors))
         session.commit()
         send_job_event("job.failed", job)
         return job
@@ -260,7 +281,7 @@ def run_job(session: Session, job_id: str) -> Job:
         co-occur — assigning it directly silently drops the others.
         """
         present = [n for n in notes if n]
-        return "; ".join(present) if present else None
+        return _fit_status_reason("; ".join(present)) if present else None
 
     job.resolution_used = resolution
     job.provider_used = used_provider
