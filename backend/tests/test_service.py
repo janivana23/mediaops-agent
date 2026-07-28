@@ -216,3 +216,48 @@ def test_no_failover_note_when_first_provider_succeeds(session, client, monkeypa
     job = _job(session, client)
     assert job.provider_used == "gemini-openrouter"
     assert job.status_reason is None
+
+
+def test_stranded_generating_jobs_are_failed_on_recovery(session, client):
+    """A container restart mid-generation leaves GENERATING rows with no
+    owner. Without recovery they stay 'generating' forever — which is what
+    a redeploy during traffic actually produced in the deployed app."""
+    job = service.create_job(
+        session,
+        client_id=client.id,
+        campaign="C",
+        prompt="p",
+        kind="image",
+        resolution="512x512",
+    )
+    job.status = JobStatus.GENERATING.value
+    session.commit()
+
+    assert service.recover_stranded_jobs(session) == 1
+    session.refresh(job)
+    assert job.status == JobStatus.FAILED.value
+    assert "interrupted" in job.status_reason
+    assert "resubmit" in job.status_reason
+
+
+def test_recovery_leaves_settled_jobs_alone(session, client, monkeypatch):
+    monkeypatch.setattr(config, "OPENROUTER_API_KEY", "")
+    delivered = _job(session, client)
+    assert delivered.status == JobStatus.DELIVERED.value
+
+    assert service.recover_stranded_jobs(session) == 0
+    session.refresh(delivered)
+    assert delivered.status == JobStatus.DELIVERED.value
+
+
+def test_recovery_does_not_charge_the_client(session, client):
+    """A job can die after a paid provider call but before the ledger
+    commits, so recovery must never invent spend."""
+    job = service.create_job(
+        session, client_id=client.id, campaign="C", prompt="p", kind="image", resolution="512x512"
+    )
+    job.status = JobStatus.GENERATING.value
+    session.commit()
+
+    service.recover_stranded_jobs(session)
+    assert service.get_client_usage_cents(session, client.id) == 0

@@ -111,6 +111,32 @@ reachable off localhost). `/health` and `/outputs` are deliberately left
 open: health checks need to work unauthenticated, and outputs are keyed
 by unguessable job ids rather than sequential ones.
 
+**8. Generation is synchronous, and the restart case is handled
+explicitly.** `run_job` calls the provider inline, inside the HTTP
+request — simple to reason about, and it keeps the REST and MCP surfaces
+identical. The cost is that a job's progress lives only in that one
+process: `run_job` commits `GENERATING` before calling a provider, so if
+the process dies mid-flight the row survives but the work doesn't. That
+isn't hypothetical — a redeploy during traffic stranded four jobs in
+`generating` in the live deployment, permanently, because nothing owned
+them any more.
+
+Rather than leave that to luck, `service.recover_stranded_jobs` runs at
+startup and fails anything left in `GENERATING`, which is the one moment
+we can be sure nothing is genuinely in flight. It deliberately does *not*
+retry: a job can die after a paid provider call succeeded but before the
+ledger entry commits, so an automatic retry risks double-charging a
+client. Failing it with a clear reason and letting a human resubmit is
+the safer default when the alternative is silent spend.
+
+The real fix is a job queue with a worker process and leases, so
+in-flight work survives a deploy instead of being cleaned up after it.
+That's the right call for production and out of scope here; the startup
+sweep is what makes the current design honest about its own failure mode.
+Note also that with two real providers and a 90s timeout each, a
+worst-case request holds the connection for ~3 minutes — another reason
+the queue is where this goes next.
+
 ## The hardest part
 
 Getting the *ordering* of the four checks right. Budget, approval,

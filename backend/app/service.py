@@ -365,3 +365,33 @@ def usage_summary(session: Session, client_id: str) -> dict:
         "used_cents": used,
         "remaining_cents": client.monthly_budget_cents - used,
     }
+
+
+def recover_stranded_jobs(session: Session) -> int:
+    """Fail any job left mid-generation by a process that died.
+
+    `run_job` commits GENERATING before calling a provider, so the row
+    survives a crash but the work does not — a container restart (redeploy,
+    OOM, host eviction) leaves jobs stuck in GENERATING with no owner and
+    nothing to ever finish them. They aren't retried automatically: a job
+    can die *after* a paid provider call succeeded but before the ledger
+    entry commits, so a blind retry risks double-charging a client. Mark
+    them failed and let a human resubmit.
+
+    Called on startup, which is the moment we can be certain nothing is
+    genuinely in flight — this process has just booted and, in a
+    single-instance deployment, no other worker owns those rows.
+    """
+    stranded = session.scalars(
+        select(Job).where(Job.status == JobStatus.GENERATING.value)
+    ).all()
+    for job in stranded:
+        job.status = JobStatus.FAILED.value
+        job.status_reason = (
+            "interrupted: the backend restarted while this job was generating. "
+            "No spend was recorded — resubmit it."
+        )
+        log.warning("recovered stranded job %s left in GENERATING", job.id)
+    if stranded:
+        session.commit()
+    return len(stranded)

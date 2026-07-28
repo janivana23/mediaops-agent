@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Header, HTTPException
@@ -8,12 +9,22 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
 from app import config, schemas, service
-from app.db import get_session, init_db
+from app.db import get_session, init_db, session_scope
+
+log = logging.getLogger("mediaops.api")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    # A job that was mid-generation when the previous process died stays in
+    # GENERATING forever — nothing owns it and nothing will finish it. That
+    # happens on every redeploy, not just on crashes. Clear them here, at
+    # the one moment we know nothing is genuinely in flight.
+    with session_scope() as session:
+        recovered = service.recover_stranded_jobs(session)
+        if recovered:
+            log.warning("startup: failed %d job(s) stranded by a previous restart", recovered)
     yield
 
 
